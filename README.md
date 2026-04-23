@@ -23,6 +23,6 @@ This system is composed of:
 
 ## Documentation links
 
-- [Full Development Guide] (https://docs.google.com/document/d/1HHSTL8_dvFfBZY46qxhkSk_gw6rnYG-cDUmNmGnLFsg/edit?usp=sharing)
+- Full Development Guide: https://docs.google.com/document/d/1HHSTL8_dvFfBZY46qxhkSk_gw6rnYG-cDUmNmGnLFsg/edit?usp=sharing
 - [Setup](documentation/setup.md)
 - [GIT Guidelines](documentation/git-guidelines.md)
