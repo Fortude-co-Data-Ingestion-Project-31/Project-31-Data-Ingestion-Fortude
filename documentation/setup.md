@@ -1,5 +1,6 @@
 # Setup
-This document describes how to get started with development
+This document describes how to get started with development.
+Refer to https://docs.google.com/document/d/1HHSTL8_dvFfBZY46qxhkSk_gw6rnYG-cDUmNmGnLFsg/edit?usp=sharing for the full Guide.
 
 ## Project 31: Data Ingestion Engine
 Follow this link to join our repository:

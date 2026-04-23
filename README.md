@@ -16,12 +16,13 @@ This system is composed of:
 | Junjie Huang (Joel)      | jhua0145@student.monash.edu | gulityeaten@gmail.com        |
 | Naveen Sellathurai       | nsel0009@student.monash.edu | Navboy44@outlook.com         |
 | Nag Rohith Chapalamadugu | rcha0087@student.monash.edu | sivasvg1rohith@gmail.com     |
-| Rowan Albert Alex        | ralb0005@student.monash.edu |                              |
+| Rowan Albert Alex        | ralb0005@student.monash.edu | ralbertalex@gmail.com        |
 | Sai Ashish Ramishetty    | sram0056@student.monash.edu | sairamishetty58@gmail.com    |
 | Sona Hariharan           | shar0108@student.monash.edu | sonahariharan067@gmail.com   |
 
 
 ## Documentation links
 
+- [Full Development Guide] (https://docs.google.com/document/d/1HHSTL8_dvFfBZY46qxhkSk_gw6rnYG-cDUmNmGnLFsg/edit?usp=sharing)
 - [Setup](documentation/setup.md)
-- [git-guidelines](documentation/git-guidelines.md)
+- [GIT Guidelines](documentation/git-guidelines.md)
