@@ -35,7 +35,8 @@ Please ensure you have the following:
 2. Type 'py -3.10 -m venv .venv' and press enter
 3. Type ‘.venv\Scripts\Activate.ps1’ and press enter*
 4. Test that your virtual environment is active and working correctly by typing 'Get-Command python'
-5. Verify that your version of python is *Python 3.10.x* by typing 'python --version'
+5. Verify that your version of python is **Python 3.10.x** by typing 'python --version'
 6. Upgrade pip by typing ‘python -m pip install --upgrade pip’ and press enter
 7. Type 'pip install -r requirements.txt'
+
 *you must do this every time you start a new terminal session to work on the project. Use 'deactivate' once you have finished working on the project.
