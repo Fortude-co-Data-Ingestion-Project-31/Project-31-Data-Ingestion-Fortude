@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.python-version
+
+# Virtual environments
+echo "*" > .venv/.gitignore
+.venv/
+venv/
+ENV/
+env/
+
+# Environment variables
+.env
+.env.*
+
+# Temporary files
+temp/
+*.tmp
+
+# Database
+.db
+
+# Testing & Coverage
+coverage/
+
+# IDEs and Editors
+.vscode/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+.exe
+.build
