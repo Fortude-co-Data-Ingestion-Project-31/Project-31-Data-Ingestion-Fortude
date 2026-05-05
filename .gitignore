@@ -1,17 +1,17 @@
-# Python artifacts
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
-*.so
 .python-version
 
 # Virtual environments
+echo "*" > .venv/.gitignore
 .venv/
 venv/
 ENV/
 env/
 
-# Environment variables (NEVER commit these)
+# Environment variables
 .env
 .env.*
 
@@ -32,3 +32,4 @@ coverage/
 .DS_Store
 Thumbs.db
 .exe
+.build
