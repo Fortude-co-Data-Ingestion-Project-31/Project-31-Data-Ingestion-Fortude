@@ -1,8 +1,8 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Query
 from contextlib import asynccontextmanager
 import httpx
 import base64
-import connector_config
+from connector_config import JIRA_BASE_URL,JIRA_EMAIL,JIRA_API_TOKEN
 from pydantic import BaseModel
 
 class JiraSearch(BaseModel):
@@ -17,36 +17,41 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
-def jira_headers():
-    email = connector_config.JIRA_EMAIL
-    token = connector_config.JIRA_API_TOKEN
-    auth = base64.b64encode(f"{email}:{token}".encode()).decode()
-
-    return {
-        "Authorization": f"Basic {auth}",
-        "Accept": "application/json",
-        "Content-Type": "application/json"
+@app.get("/jira/my_issues")
+async def get_my_issues():
+    """
+    Fetch issues assigned to the authenticated user from Jira.
+    """
+    JIRA_AUTH = httpx.BasicAuth(JIRA_EMAIL, JIRA_API_TOKEN)
+    url=JIRA_BASE_URL+"rest/api/3/search/jql"
+    
+    params = {
+        "jql": "assignee = currentUser()",
+        "maxResults": 5000,
+        "fields": "*all"
     }
 
-@app.get("/jira/issues/{issue_key}")
-async def get_issue(issue_key: str, request: Request):
-    client = request.state.client
-    url = f"{connector_config.JIRA_BASE_URL}/rest/api/3/issue/{issue_key}"
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(
+                url,
+                params=params,
+                auth=JIRA_AUTH,
+                headers={"Accept": "application/json"}
+            )
+            
+            # If Jira returns an error (401, 404, etc), raise it for FastAPI to handle
+            response.raise_for_status()
+            
+            return response.json()
 
-    resp = await client.get(url, headers=jira_headers())
-    resp.raise_for_status()
-    return resp.json()
-
-@app.post("/jira/search")
-async def search_jira(data: JiraSearch, request: Request):
-    client = request.state.client
-    url = f"{connector_config.JIRA_BASE_URL}/rest/api/3/search"
-
-    payload = {
-        "jql": data.jql,
-        "maxResults": data.max_results
-    }
-
-    resp = await client.post(url, json=payload, headers=jira_headers())
-    resp.raise_for_status()
-    return resp.json()
+        except httpx.HTTPStatusError as e:
+            raise HTTPException(
+                status_code=e.response.status_code, 
+                detail=f"Jira API error: {e.response.text}"
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=500, 
+                detail=f"Internal Server Error: {str(e)}"
+            )
