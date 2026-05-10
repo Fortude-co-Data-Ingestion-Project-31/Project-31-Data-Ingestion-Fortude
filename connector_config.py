@@ -1,3 +1,3 @@
 JIRA_BASE_URL="https://student-team-lf3k5yqq.atlassian.net/"
 JIRA_EMAIL="jhua0145@student.monash.edu"
-JIRA_API_TOKEN="ATATT3xFfGF0MyrqfsTVzTcR-1c4YbrXArPGk1SlCsbALhNE_3TTWDtuZ2wLFDDio8emn2DN4IY5CpnVj0hHKIyIpcYVQOmie-TO01ubsh0p-h3G1JT2b1JNmDLrMRbaEZdc2wxyjC59cCoc_rj1eZCRJPtHULRs9K2tvP6KHXfqPK7jgjvwSUY=135BA4F7"
+JIRA_API_TOKEN=""
