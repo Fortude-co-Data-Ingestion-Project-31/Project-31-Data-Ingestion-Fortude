@@ -1,0 +1,38 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Data Ingestion History - Fortude</title>
+    <link rel="stylesheet" href="/src/styles.css">
+    <style>
+      .history-container { max-width: 980px; margin: 2.25rem auto; padding: 1.5rem }
+      .history-title { text-align: center; font-size: 2.25rem; margin: 0 0 1rem }
+      .history-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem }
+      .history-item { display: flex; align-items: center; justify-content: space-between; padding: 0.8rem 1rem; background: var(--muted); border-radius: 6px }
+      .history-item span { display: inline-block }
+      .history-actions { display: inline-flex; gap: 0.75rem; align-items: center }
+      .history-actions .btn.small { min-width: 75px }
+      @media (max-width: 720px) { .history-item { flex-direction: column; align-items: stretch; gap: 0.65rem } .history-actions { justify-content: flex-end } }
+    </style>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">Fortude</div>
+      <nav class="topnav">
+        <button class="link">Ingest</button>
+        <button class="link">History</button>
+        <button class="link">Configure</button>
+      </nav>
+      <div class="profile-toggle" aria-hidden></div>
+    </header>
+
+    <main class="history-container">
+      <h1 class="history-title">Data Ingestion History</h1>
+      <ul class="history-list">
+        <!-- TO ADD: Query all Past Ingestions -->
+        <!-- <li class="history-item"><span>Entry 1</span><span class="history-actions"><button class="btn small">View</button><button class="btn small">Delete</button></span></li> -->
+      </ul>
+    </main>
+  </body>
+</html>

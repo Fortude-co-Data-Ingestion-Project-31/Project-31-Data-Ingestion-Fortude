@@ -1,0 +1,63 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Configurations - Fortude</title>
+    <link rel="stylesheet" href="/src/styles.css">
+    <style>
+      .configs-container{max-width:980px;margin:2.25rem auto;padding:1.5rem}
+      .configs-title{text-align:center;font-size:2.25rem;margin:0 0 1rem}
+      .three-panels{display:grid;grid-template-columns:repeat(3,1fr);gap:1.25rem}
+      .small-panel{background:var(--card);padding:1rem;border-radius:6px;box-shadow:0 4px 10px rgba(0,0,0,0.04)}
+      .small-panel h3{margin-top:0;font-size:1rem}
+      .small-list{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:0.5rem}
+      .small-item{display:flex;align-items:center;justify-content:space-between;padding:0.5rem 0.6rem;background:var(--muted);border-radius:4px}
+      @media (max-width:980px){.three-panels{grid-template-columns:1fr}}
+    </style>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">Fortude</div>
+      <nav class="topnav">
+        <button class="link">Ingest</button>
+        <button class="link">History</button>
+        <button class="link">Configure</button>
+      </nav>
+      <div class="profile-toggle" aria-hidden></div>
+    </header>
+
+    <main class="configs-container">
+      <h1 class="configs-title">Configurations</h1>
+
+      <div class="three-panels">
+        <div class="small-panel">
+          <h3>Connectors</h3>
+          <ul class="small-list">
+            <!-- TO ADD: Query all Connectors -->
+            <!-- <li class="small-item"><span>Entry 1</span><span><button class="btn small">View</button> <button class="btn small">Delete</button></span></li> -->
+            <button class="btn full">Add</button>
+          </ul>
+        </div>
+
+        <div class="small-panel">
+          <h3>Rules</h3>
+          <ul class="small-list">
+            <!-- TO ADD: Query all Rules -->
+            <!-- <li class="small-item"><span>Entry 1</span><span><button class="btn small">View</button> <button class="btn small">Delete</button></span></li> -->
+            <button class="btn full">Add</button>
+          </ul>
+        </div>
+
+        <div class="small-panel">
+          <h3>Output targets</h3>
+          <ul class="small-list">
+            <!-- TO ADD: Query all Output Targets -->
+            <!-- <li class="small-item"><span>Entry 1</span><span><button class="btn small">View</button> <button class="btn small">Delete</button></span></li> -->
+            <button class="btn full">Add</button>
+          </ul>
+        </div>
+      </div>
+    </main>
+  </body>
+</html>
