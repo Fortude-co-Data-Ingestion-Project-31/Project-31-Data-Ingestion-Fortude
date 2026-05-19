@@ -2,14 +2,31 @@ import requests
 
 def test_my_jira_endpoint():
     # The URL where your FastAPI server is running
-    local_url = "http://127.0.0.1:8000/jira/my_issues"
+    field_url = "http://127.0.0.1:8000/jira/get_fields"
+    issue_url = "http://127.0.0.1:8000/jira/my_issues"
     
-    print(f"Testing endpoint: {local_url}...")
-    
+    print(f"Testing endpoint: {field_url}...")
     try:
-        # We don't need Jira auth here because the FastAPI backend 
-        # handles it internally!
-        response = requests.get(local_url)
+       
+        response = requests.get(field_url)
+        
+        # Check if the FastAPI backend returned a success
+        if response.status_code == 200:
+            data = response.json()
+            
+            print("Successfully connected to FastAPI!")
+            print("fleid data")
+            print(data)
+        else:
+            print(f"Failed! Status Code: {response.status_code}")
+            print(f"Response: {response.text}")
+            
+    except requests.exceptions.ConnectionError:
+        print("Error: Could not connect to the FastAPI server. Is it running?")
+
+    try:
+       
+        response = requests.get(issue_url)
         
         # Check if the FastAPI backend returned a success
         if response.status_code == 200:
@@ -21,6 +38,8 @@ def test_my_jira_endpoint():
             
             for issue in issues:
                 print(f" - {issue['key']}: {issue['fields']['summary']}")
+            print("below is the full data")
+            print(data)
         else:
             print(f"Failed! Status Code: {response.status_code}")
             print(f"Response: {response.text}")

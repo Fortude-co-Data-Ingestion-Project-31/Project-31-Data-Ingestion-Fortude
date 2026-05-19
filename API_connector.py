@@ -17,12 +17,15 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
+def auth_header():
+    return httpx.BasicAuth(JIRA_EMAIL, JIRA_API_TOKEN)
+
 @app.get("/jira/my_issues")
 async def get_my_issues():
     """
     Fetch issues assigned to the authenticated user from Jira.
     """
-    JIRA_AUTH = httpx.BasicAuth(JIRA_EMAIL, JIRA_API_TOKEN)
+    
     url=JIRA_BASE_URL+"rest/api/3/search/jql"
     
     params = {
@@ -36,7 +39,7 @@ async def get_my_issues():
             response = await client.get(
                 url,
                 params=params,
-                auth=JIRA_AUTH,
+                auth=auth_header(),
                 headers={"Accept": "application/json"}
             )
             
@@ -53,5 +56,37 @@ async def get_my_issues():
         except Exception as e:
             raise HTTPException(
                 status_code=500, 
+                detail=f"Internal Server Error: {str(e)}"
+            )
+        
+@app.get("/jira/get_fields")
+async def get_jira_fields():
+    """
+    Fetch all Jira field metadata including custom fields.
+    """
+
+    url = JIRA_BASE_URL + "rest/api/3/field"
+
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(
+                url,
+                auth=auth_header(),
+                headers={"Accept": "application/json"}
+            )
+
+            response.raise_for_status()
+
+            return response.json()
+
+        except httpx.HTTPStatusError as e:
+            raise HTTPException(
+                status_code=e.response.status_code,
+                detail=f"Jira API error: {e.response.text}"
+            )
+
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
                 detail=f"Internal Server Error: {str(e)}"
             )
