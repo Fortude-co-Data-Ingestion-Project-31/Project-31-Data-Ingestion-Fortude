@@ -6,18 +6,33 @@ from jira_transformer import transform_canonical_tickets_for_l3
 
 
 def test_my_jira_endpoint():
-    # The URL where your FastAPI server is running
     field_url = "http://127.0.0.1:8000/jira/get_fields"
     issue_url = "http://127.0.0.1:8000/jira/my_issues"
-    
-    print(f"Testing endpoint: {field_url}...")
+    authentication_url = "http://127.0.0.1:8000/jira/authentication_check"
+
+    print(f"Testing endpoint: {authentication_url}...")
+    try:
+       
+        response = requests.get(authentication_url)
+        
+        # Check if the FastAPI backend returned a success
+        if response.status_code == 200:
+            authen_data = response.json()
+            
+            print("Successfully verify auth info!")
+        else:
+            print(f"Failed! Status Code: {response.status_code}")
+            print(f"Response: {response.text}")
+            
+    except requests.exceptions.ConnectionError:
+        print("Error: Could not connect to the FastAPI server.")
     try:
        
         response = requests.get(field_url)
         
         # Check if the FastAPI backend returned a success
         if response.status_code == 200:
-            data = response.json()
+            field_data = response.json()
             
             print("Successfully retrieve field data!")
         else:
@@ -25,7 +40,7 @@ def test_my_jira_endpoint():
             print(f"Response: {response.text}")
             
     except requests.exceptions.ConnectionError:
-        print("Error: Could not connect to the FastAPI server. Is it running?")
+        print("Error: Could not fetch field data")
 
     try:
        
@@ -37,10 +52,10 @@ def test_my_jira_endpoint():
             issues = data.get("issues", [])
 
             print("Successfully connected to FastAPI!")
-            print(f"Found {len(issues)} issues assigned to you.\n")
-
+            print(f"Found {len(issues)} unfinished issues assigned to you.\n")
             for issue in issues:
-                print(f" - {issue['key']}: {issue['fields']['summary']}")
+                
+                print(f" - {issue['key']}: {issue['fields']['summary']} - {issue['fields']['issuetype']['name']}")
 
             if len(issues) > 0:
                 canonical_tickets = map_jira_response_to_canonical(data)

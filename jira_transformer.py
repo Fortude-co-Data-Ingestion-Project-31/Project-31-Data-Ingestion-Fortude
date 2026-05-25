@@ -39,7 +39,8 @@ def transform_canonical_ticket_for_l3(ticket):
     critical_keyword_found = has_critical_keyword(ticket)
     sla_hours = get_sla_hours(ticket.get("customer_tier"))
     hours_since_created = get_hours_since_created(ticket.get("created_at"))
-
+    if not ticket.get("is_L3"):
+        return None
     breach_risk_score = 0
     if sla_hours > 0:
         breach_risk_score = round(min(hours_since_created / sla_hours, 1), 2)
@@ -74,6 +75,7 @@ def transform_canonical_tickets_for_l3(tickets):
 
     for ticket in tickets:
         transformed_ticket = transform_canonical_ticket_for_l3(ticket)
-        transformed_tickets.append(transformed_ticket)
+        if transformed_ticket!= None:
+            transformed_tickets.append(transformed_ticket)
 
     return transformed_tickets

@@ -20,6 +20,22 @@ app = FastAPI(lifespan=lifespan)
 def auth_header():
     return httpx.BasicAuth(JIRA_EMAIL, JIRA_API_TOKEN)
 
+@app.get("/jira/authentication_check")
+async def jira_me():
+
+    url = JIRA_BASE_URL + "/rest/api/3/myself"
+
+    client = app.state.client
+
+    response = await client.get(
+        url,
+        auth=auth_header(),
+        headers={"Accept": "application/json"}
+    )
+    response.raise_for_status()
+
+    return response.json()
+
 @app.get("/jira/my_issues")
 async def get_my_issues():
     """
@@ -38,8 +54,8 @@ async def get_my_issues():
         try:
             response = await client.get(
                 url,
-                params=params,
-                auth=auth_header(),
+                params = params,
+                auth = auth_header(),
                 headers={"Accept": "application/json"}
             )
             
