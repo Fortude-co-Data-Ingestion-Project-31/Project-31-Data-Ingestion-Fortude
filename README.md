@@ -27,18 +27,16 @@ This system is composed of:
 - [Setup](documentation/setup.md)
 - [GIT Guidelines](documentation/git-guidelines.md)
 
-## Frontend (src)
+## Frontend
 
 - **Install dependencies:**
 
 	```bash
-	cd src
 	npm install
 	```
 
 - **Run development server:**
 
 	```bash
-	cd src
 	npm run dev
 	```
