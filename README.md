@@ -26,3 +26,19 @@ This system is composed of:
 - Full Development Guide: https://docs.google.com/document/d/1HHSTL8_dvFfBZY46qxhkSk_gw6rnYG-cDUmNmGnLFsg/edit?usp=sharing
 - [Setup](documentation/setup.md)
 - [GIT Guidelines](documentation/git-guidelines.md)
+
+## Frontend (src)
+
+- **Install dependencies:**
+
+	```bash
+	cd src
+	npm install
+	```
+
+- **Run development server:**
+
+	```bash
+	cd src
+	npm run dev
+	```
