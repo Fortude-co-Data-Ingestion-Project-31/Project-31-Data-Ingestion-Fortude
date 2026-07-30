@@ -27,7 +27,7 @@ async def get_infor_token(client):
     return response.json()["access_token"] # Infor returns Json
 
 
-@router.get("/purchase-orders/{punno}/lines")
+@router.get("/purchase-orders/{puno}/lines")
 async def get_purchase_order_lines(puno: str, request: Request):
     client = request.app.state.client
     token = await get_infor_token(client)
@@ -49,6 +49,34 @@ async def get_purchase_order_lines(puno: str, request: Request):
 
     response.raise_for_status()
     return response.json()
+
+
+# now second infor endpoints customer order lines
+# each endpoint should have one responsibility
+
+@router.get("/customer-orders/{orno}/lines") 
+async def get_customer_order_lines(orno:str, request:Request):
+    client = request.app.state.client
+    token = await get_infor_token(client)
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/json"
+    
+    }
+
+    url = f"{connector_config.INFOR_BASE_URL}/OIS100MI/LstLine"
+    
+    response = await client.get( 
+        url,
+        headers=headers, 
+        params={"ORNO": orno}
+
+    )
+
+    response.raise_for_status()
+    return response.json()
+
 
 
 
