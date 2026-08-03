@@ -1,25 +1,22 @@
 import React from "react";
-import { Trash2 } from "lucide-react";
-import { COLORS, FONTS } from "../theme";
-import Dot from "./Dot";
+import { COLORS } from "../theme";
 
-export default function Row({ label, sub, onView, onDelete }) {
+export default function Row({ label, sub, onEdit, onDelete }) {
   return (
-    <div className="flex items-center justify-between px-5 py-3 text-sm" style={{ borderBottom: `1px solid ${COLORS.inkSoft}` }}>
-      <div className="flex items-center gap-2.5">
-        <Dot />
-        <span>{label}</span>
-        {sub && <span className="text-xs ml-1" style={{ fontFamily: FONTS.mono, color: COLORS.slate }}>{sub}</span>}
+    <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: `1px solid ${COLORS.borderSoft}` }}>
+      <div>
+        <span className="text-sm" style={{ color: COLORS.text }}>{label}</span>
+        {sub && <span className="text-xs ml-2" style={{ color: COLORS.textFaint }}>{sub}</span>}
       </div>
-      <div className="flex items-center gap-3.5">
-        {onView && (
-          <button onClick={onView} className="text-xs bg-transparent border-none cursor-pointer" style={{ fontFamily: FONTS.mono, color: COLORS.steel }}>
-            View
+      <div className="flex items-center gap-5">
+        {onEdit && (
+          <button onClick={onEdit} className="text-sm bg-transparent border-none cursor-pointer font-medium" style={{ color: COLORS.blue }}>
+            Edit
           </button>
         )}
         {onDelete && (
-          <button onClick={onDelete} className="text-xs bg-transparent border-none cursor-pointer flex items-center gap-1" style={{ fontFamily: FONTS.mono, color: COLORS.bad }}>
-            <Trash2 size={12} /> Delete
+          <button onClick={onDelete} className="text-sm bg-transparent border-none cursor-pointer font-medium" style={{ color: COLORS.red }}>
+            Delete
           </button>
         )}
       </div>

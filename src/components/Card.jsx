@@ -1,17 +1,17 @@
 import React from "react";
-import { COLORS, FONTS } from "../theme";
+import { COLORS } from "../theme";
 
-export default function Card({ title, chip, children, footer, onFooterClick }) {
+export default function Card({ title, count, children, footer, onFooterClick }) {
   return (
-    <div className="rounded-md overflow-hidden" style={{ background: COLORS.panel, border: `1px solid ${COLORS.panelLine}` }}>
-      <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: `1px solid ${COLORS.panelLine}` }}>
-        <h3 className="m-0 font-semibold text-base" style={{ fontFamily: FONTS.display }}>{title}</h3>
-        {chip && (
+    <div className="rounded-lg overflow-hidden" style={{ background: COLORS.card, border: `1px solid ${COLORS.border}` }}>
+      <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: `1px solid ${COLORS.borderSoft}` }}>
+        <h3 className="m-0 font-semibold text-base" style={{ color: COLORS.text }}>{title}</h3>
+        {count !== undefined && (
           <span
-            className="text-xs px-2.5 py-1 rounded-full"
-            style={{ fontFamily: FONTS.mono, color: COLORS.slate, background: COLORS.inkSoft, border: `1px solid ${COLORS.panelLine}` }}
+            className="flex items-center justify-center rounded-full text-xs font-semibold"
+            style={{ width: 24, height: 24, background: COLORS.badgeBg, color: COLORS.badgeText, border: `1px solid ${COLORS.border}` }}
           >
-            {chip}
+            {count}
           </span>
         )}
       </div>
@@ -19,8 +19,8 @@ export default function Card({ title, chip, children, footer, onFooterClick }) {
       {footer && (
         <div
           onClick={onFooterClick}
-          className="text-center py-3 text-xs cursor-pointer tracking-wide"
-          style={{ fontFamily: FONTS.mono, color: COLORS.slate, borderTop: `1px solid ${COLORS.panelLine}`, background: COLORS.inkSoft }}
+          className="text-center py-4 text-sm cursor-pointer font-semibold"
+          style={{ color: COLORS.orange, borderTop: `1px solid ${COLORS.borderSoft}` }}
         >
           {footer}
         </div>
