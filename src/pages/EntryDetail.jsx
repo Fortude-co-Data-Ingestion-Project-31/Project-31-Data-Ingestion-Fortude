@@ -1,7 +1,6 @@
 import React from "react";
 import { ArrowLeft } from "lucide-react";
-import { COLORS, FONTS } from "../theme";
-import Dot from "../components/Dot";
+import { COLORS } from "../theme";
 import PageHeading from "../components/PageHeading";
 
 export default function EntryDetail({ entry, goTo }) {
@@ -15,41 +14,37 @@ export default function EntryDetail({ entry, goTo }) {
 
   return (
     <section>
-      <div onClick={() => goTo("history")} className="inline-flex items-center gap-1.5 text-xs cursor-pointer mb-6" style={{ fontFamily: FONTS.mono, color: COLORS.slate }}>
-        <ArrowLeft size={13} /> Back to history
+      <div onClick={() => goTo("history")} className="inline-flex items-center gap-1.5 text-sm cursor-pointer mb-5 font-medium" style={{ color: COLORS.textMuted }}>
+        <ArrowLeft size={14} /> Back to history
       </div>
 
-      <PageHeading
-        eyebrow="// run detail"
-        title={`Data Ingestion Entry ${entry.id}`}
-        subtitle="What this run was built from, and where it sent the data."
-      />
+      <PageHeading title={`Data Ingestion Entry ${entry.id}`} subtitle="What this run was built from, and where it sent the data." />
 
-      <div className="rounded-md p-10" style={{ background: COLORS.panel, border: `1px solid ${COLORS.panelLine}` }}>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+      <div className="rounded-lg p-8" style={{ background: COLORS.card, border: `1px solid ${COLORS.border}` }}>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-7 mb-8">
           {fields.map(([label, value]) => (
             <div key={label}>
-              <div className="text-xs uppercase tracking-widest mb-1.5" style={{ fontFamily: FONTS.mono, color: COLORS.slate, letterSpacing: "0.08em" }}>
+              <div className="text-xs font-semibold uppercase tracking-wide mb-1.5" style={{ color: COLORS.textFaint, letterSpacing: "0.05em" }}>
                 {label}
               </div>
-              <div className="font-semibold" style={{ fontFamily: FONTS.display, fontSize: 19 }}>{value}</div>
+              <div className="font-semibold" style={{ color: COLORS.text, fontSize: 17 }}>{value}</div>
             </div>
           ))}
           <div>
-            <div className="text-xs uppercase tracking-widest mb-1.5" style={{ fontFamily: FONTS.mono, color: COLORS.slate, letterSpacing: "0.08em" }}>
-              Run status
+            <div className="text-xs font-semibold uppercase tracking-wide mb-1.5" style={{ color: COLORS.textFaint, letterSpacing: "0.05em" }}>
+              Run Status
             </div>
-            <div className="font-semibold" style={{ color: COLORS.good, fontSize: 15 }}>Completed</div>
+            <div className="font-semibold" style={{ color: "#15803d", fontSize: 15 }}>Completed</div>
           </div>
         </div>
 
-        <div className="text-xs uppercase tracking-widest mb-3" style={{ fontFamily: FONTS.mono, color: COLORS.slate, letterSpacing: "0.08em" }}>
+        <div className="text-xs font-semibold uppercase tracking-wide mb-3" style={{ color: COLORS.textFaint, letterSpacing: "0.05em" }}>
           Outputs
         </div>
         <div className="flex flex-wrap gap-2.5">
           {entry.outputs.map((o) => (
-            <div key={o} className="flex items-center gap-2 text-xs px-4 py-2 rounded-full" style={{ fontFamily: FONTS.mono, background: COLORS.inkSoft, border: `1px solid ${COLORS.panelLine}` }}>
-              <Dot /> {o}
+            <div key={o} className="text-sm px-4 py-2 rounded-full font-medium" style={{ background: COLORS.badgeBg, border: `1px solid ${COLORS.border}`, color: COLORS.text }}>
+              {o}
             </div>
           ))}
         </div>
