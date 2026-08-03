@@ -2,13 +2,22 @@ import React from "react";
 import { Menu, Bell, Settings } from "lucide-react";
 import { COLORS } from "../theme";
 
-export default function Header({ notificationCount = 3 }) {
+// The top header bar provides the app title actions and the menu button for the sidebar.
+export default function Header({ notificationCount = 3, onToggleSidebar }) {
   return (
     <div
       className="flex items-center justify-between px-8"
       style={{ height: 64, background: COLORS.header, borderBottom: `1px solid ${COLORS.border}` }}
     >
-      <Menu size={20} style={{ color: COLORS.textMuted }} className="cursor-pointer" />
+      <button
+        type="button"
+        onClick={onToggleSidebar}
+        className="rounded-md p-2 transition-colors hover:bg-slate-100"
+        aria-label="Toggle sidebar navigation"
+      >
+        <Menu size={20} style={{ color: COLORS.textMuted }} />
+      </button>
+
       <div className="flex items-center gap-5">
         <div className="relative cursor-pointer">
           <Bell size={19} style={{ color: COLORS.textMuted }} />

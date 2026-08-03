@@ -1,6 +1,7 @@
 import React from "react";
 import { COLORS } from "../theme";
 
+// A reusable card container used to group dashboard and configuration sections.
 export default function Card({ title, count, children, footer, onFooterClick }) {
   return (
     <div className="rounded-lg overflow-hidden" style={{ background: COLORS.card, border: `1px solid ${COLORS.border}` }}>
