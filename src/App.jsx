@@ -96,14 +96,28 @@ export default function App() {
   };
 
   // Handles submission of a new ingestion request from the form page.
-  const startIngestion = () => {
-    // TODO: Replace this local state update with a POST request to the backend API.
-    const entry = { id: nextId, ...form, outputs: [form.outputs] };
-    setHistory((h) => [...h, entry]);
-    setNextId((n) => n + 1);
-    showToast(`Ingestion started — Entry ${nextId}`);
-    setForm({ connector: "", mapper: "", rules: "", outputs: "" });
-    goTo("dashboard");
+  const startIngestion = async () => {
+    try {
+      const response = await fetch("http://127.0.0.1:8000/api/ingest/local-folder", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ connector: form.connector }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Ingestion request failed");
+      }
+
+      const data = await response.json();
+      const entry = { id: nextId, ...form, outputs: [form.outputs] };
+      setHistory((h) => [...h, entry]);
+      setNextId((n) => n + 1);
+      showToast(`Ingestion complete - ${data.processed} document(s) processed`);
+      setForm({ connector: "", mapper: "", rules: "", outputs: "" });
+      goTo("dashboard");
+    } catch (error) {
+      showToast("Ingestion failed. Please try again.");
+    }
   };
 
   const activeEntry = history.find((e) => e.id === activeEntryId) || history[0];
