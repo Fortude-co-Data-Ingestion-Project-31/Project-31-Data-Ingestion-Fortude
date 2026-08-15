@@ -20,8 +20,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from local_file_mapper import map_local_files_to_canonical
-from local_folder_connector import read_local_text_files
+from backend.app.mappers.local_file_mapper import map_local_files_to_canonical
+from backend.app.connectors.local_folder_connector import read_local_text_files
 from backend.app.rules.rule_handlers import apply_selected_rules
 from backend.app import auth
 import sqlite3

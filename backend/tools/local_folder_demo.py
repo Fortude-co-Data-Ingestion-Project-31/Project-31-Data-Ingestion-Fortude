@@ -1,11 +1,11 @@
 import json
 from pathlib import Path
 
-from local_file_mapper import map_local_files_to_canonical
-from local_folder_connector import read_local_text_files
+from backend.app.mappers.local_file_mapper import map_local_files_to_canonical
+from backend.app.connectors.local_folder_connector import read_local_text_files
 
 
-BASE_FOLDER = Path(__file__).parent
+BASE_FOLDER = Path(__file__).resolve().parents[2]
 INPUT_FOLDER = BASE_FOLDER / "local_data" / "input"
 OUTPUT_FOLDER = BASE_FOLDER / "local_data" / "output"
 

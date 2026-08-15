@@ -2,6 +2,10 @@ from pathlib import Path
 
 
 def read_local_text_files(input_folder):
+    """Read .txt files from `input_folder` and return a list of file records.
+
+    Each record contains file metadata and the UTF-8 decoded content.
+    """
     raw_file_records = []
 
     for file_path in sorted(Path(input_folder).iterdir()):
