@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { COLORS, FONTS, GOOGLE_FONTS_IMPORT } from "./theme";
+import { COLORS, FONTS, GOOGLE_FONTS_IMPORT, LIGHT_THEME, DARK_THEME } from "./theme";
 import { INITIAL_HISTORY, INITIAL_CONFIG } from "./data";
 import Sidebar from "./components/Sidebar";
 import Header from "./components/Header";
@@ -10,6 +10,9 @@ import NewIngestion from "./pages/NewIngestion";
 import Configure from "./pages/Configure";
 import History from "./pages/History";
 import EntryDetail from "./pages/EntryDetail";
+import Login from "./pages/Login";
+import Settings from "./pages/Settings";
+import ChangeUsername from "./pages/ChangeUsername";
 
 // A simple page-label map used by the badge component at the top of the app.
 const PAGE_LABELS = {
@@ -17,11 +20,16 @@ const PAGE_LABELS = {
   ingest: "Ingest Page",
   history: "History Page",
   configure: "Configuration Page",
+  settings: "Settings",
+  "change-username": "Change Username",
   entry: "Ingestion Entry Page",
 };
 
 // The root app component controls navigation, shared state, and the main layout.
 export default function App() {
+  const [authenticated, setAuthenticated] = useState(false);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [themeMode, setThemeMode] = useState("light");
   // Tracks which page is currently visible in the main content area.
   const [page, setPage] = useState("dashboard");
   // Controls whether the left-hand navigation panel is visible.
@@ -47,6 +55,21 @@ export default function App() {
 
   useEffect(() => () => clearTimeout(toastTimer.current), []);
 
+  useEffect(() => {
+    const storedTheme = localStorage.getItem("theme");
+    if (storedTheme === "dark" || storedTheme === "light") {
+      setThemeMode(storedTheme);
+    }
+  }, []);
+
+  useEffect(() => {
+    const theme = themeMode === "dark" ? DARK_THEME : LIGHT_THEME;
+    Object.entries(theme).forEach(([key, value]) => {
+      document.documentElement.style.setProperty(`--${key}`, value);
+    });
+    localStorage.setItem("theme", themeMode);
+  }, [themeMode]);
+
   // FUTURE BACKEND HOOK:
   // Replace these mock state initializers with real API requests once the backend is available.
   useEffect(() => {
@@ -55,11 +78,40 @@ export default function App() {
     //   .then((response) => response.json())
     //   .then((data) => setHistory(data))
     //   .catch(() => showToast("Unable to load ingestion history"));
+    // Check for stored token and verify with backend
+    const token = localStorage.getItem("auth_token");
+    if (token) {
+      fetch("http://127.0.0.1:8000/api/auth/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token }),
+      })
+        .then((r) => {
+          if (!r.ok) throw new Error("invalid token");
+          return r.json();
+        })
+        .then((data) => {
+          setAuthenticated(true);
+          setCurrentUser(data.username);
+        })
+        .catch(() => {
+          localStorage.removeItem("auth_token");
+          setAuthenticated(false);
+          setCurrentUser(null);
+        });
+    }
   }, []);
 
   // Opens or closes the navigation drawer on smaller screens or when the user clicks the menu button.
   const toggleSidebar = () => setIsSidebarOpen((prev) => !prev);
   const closeSidebar = () => setIsSidebarOpen(false);
+
+  const signOut = () => {
+    setAuthenticated(false);
+    setCurrentUser(null);
+    localStorage.removeItem("auth_token");
+    goTo("dashboard");
+  };
 
   // Switches the visible page and scrolls the content area back to the top.
   const goTo = (p) => {
@@ -101,7 +153,7 @@ export default function App() {
       const response = await fetch("http://127.0.0.1:8000/api/ingest/local-folder", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ connector: form.connector }),
+        body: JSON.stringify({ connector: form.connector, rule: form.rules }),
       });
 
       if (!response.ok) {
@@ -122,6 +174,10 @@ export default function App() {
 
   const activeEntry = history.find((e) => e.id === activeEntryId) || history[0];
 
+  if (!authenticated) {
+    return <Login onLogin={(username) => { setAuthenticated(true); setCurrentUser(username); }} />;
+  }
+
   return (
     <div style={{ background: COLORS.bg, fontFamily: FONTS.body, minHeight: "100vh" }}>
       <style>{`
@@ -133,21 +189,29 @@ export default function App() {
       <PageBadge label={PAGE_LABELS[page]} />
 
       <div className="flex rounded-xl overflow-hidden mx-6 mb-6 relative" style={{ border: `1px solid ${COLORS.border}`, background: COLORS.bg }}>
-        {isSidebarOpen && (
-          <div className="fixed inset-0 z-20 bg-black/30 transition-opacity duration-200 md:hidden" onClick={closeSidebar} />
-        )}
+        {/* Sidebar overlay removed — sidebar now opens/closes only via hamburger */}
 
         <div className="relative z-30">
-          {isSidebarOpen ? <Sidebar page={page} goTo={goTo} onClose={closeSidebar} /> : null}
+          {isSidebarOpen ? (
+            <Sidebar page={page} goTo={goTo} user={currentUser} onSignOut={signOut} />
+          ) : null}
         </div>
 
         <div className="flex-1 min-w-0">
-          <Header notificationCount={3} onToggleSidebar={toggleSidebar} />
+          <Header
+            notificationCount={3}
+            onToggleSidebar={toggleSidebar}
+            onOpenSettings={() => goTo("settings")}
+            themeMode={themeMode}
+            onToggleTheme={() => setThemeMode((prev) => (prev === "dark" ? "light" : "dark"))}
+          />
 
           <div className="px-8 py-8">
             {page === "dashboard" && <Dashboard history={history} config={config} goTo={goTo} openEntry={openEntry} />}
             {page === "ingest" && <NewIngestion form={form} setForm={setForm} onStart={startIngestion} />}
             {page === "configure" && <Configure config={config} addRow={addRow} removeConfigRow={removeConfigRow} />}
+            {page === "settings" && <Settings token={localStorage.getItem("auth_token")} currentUser={currentUser} onSaved={(username) => setCurrentUser(username)} goTo={goTo} />}
+            {page === "change-username" && <ChangeUsername token={localStorage.getItem("auth_token")} currentUser={currentUser} onSaved={(username) => setCurrentUser(username)} goTo={goTo} />}
             {page === "history" && <History history={history} openEntry={openEntry} deleteEntry={deleteEntry} />}
             {page === "entry" && <EntryDetail entry={activeEntry} goTo={goTo} />}
           </div>

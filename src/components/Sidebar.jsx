@@ -1,5 +1,5 @@
 import React from "react";
-import { LayoutGrid, Activity, History as HistoryIcon, Settings, ChevronDown, X } from "lucide-react";
+import { LayoutGrid, Activity, History as HistoryIcon, Settings } from "lucide-react";
 import { COLORS } from "../theme";
 
 // The list of page links shown in the left navigation area.
@@ -11,7 +11,16 @@ const NAV_ITEMS = [
 ];
 
 // Sidebar renders the main navigation and the user profile section on the left side of the app.
-export default function Sidebar({ page, goTo, onClose = () => {} }) {
+export default function Sidebar({ page, goTo, user = null, onSignOut = () => {} }) {
+  const initials = (() => {
+    if (!user) return "AS";
+    const parts = String(user).split(/\s+/).filter(Boolean);
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  })();
+
+  const displayName = user || "Amanda Smith";
+
   return (
     <div
       className="flex flex-col justify-between flex-shrink-0"
@@ -31,14 +40,7 @@ export default function Sidebar({ page, goTo, onClose = () => {} }) {
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-md p-1.5 transition-colors hover:bg-slate-100"
-            aria-label="Close sidebar navigation"
-          >
-            <X size={16} style={{ color: COLORS.textMuted }} />
-          </button>
+          {/* Removed close button; sidebar controlled only by header hamburger */}
         </div>
 
         <nav className="mt-2 px-3" aria-label="Sidebar navigation">
@@ -64,18 +66,21 @@ export default function Sidebar({ page, goTo, onClose = () => {} }) {
       </div>
 
       <div className="px-4 py-4" style={{ borderTop: `1px solid ${COLORS.border}` }}>
-        <div className="flex items-center gap-2.5 cursor-pointer">
+        <div className="flex items-center gap-2.5">
           <div
             className="flex items-center justify-center rounded-full text-white text-xs font-semibold flex-shrink-0"
             style={{ width: 32, height: 32, background: COLORS.blue }}
           >
-            AS
+            {initials}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-sm font-semibold truncate" style={{ color: COLORS.text }}>Amanda Smith</div>
-            <div className="text-xs truncate" style={{ color: COLORS.textFaint }}>amandasmith@gmail.com</div>
+            <div className="text-sm font-semibold truncate" style={{ color: COLORS.text }}>{displayName}</div>
+            <div className="text-xs truncate" style={{ color: COLORS.textFaint }}>{user ? "Signed in" : "guest"}</div>
           </div>
-          <ChevronDown size={15} style={{ color: COLORS.textFaint }} />
+        </div>
+
+        <div className="mt-3">
+          <button onClick={onSignOut} className="w-full text-left text-sm text-red-600 hover:underline">Sign out</button>
         </div>
       </div>
     </div>

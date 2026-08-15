@@ -1,9 +1,9 @@
 import React from "react";
-import { Menu, Bell, Settings } from "lucide-react";
+import { Menu, Bell, Settings, Moon, Sun } from "lucide-react";
 import { COLORS } from "../theme";
 
 // The top header bar provides the app title actions and the menu button for the sidebar.
-export default function Header({ notificationCount = 3, onToggleSidebar }) {
+export default function Header({ notificationCount = 3, onToggleSidebar, onOpenSettings = () => {}, themeMode = "light", onToggleTheme = () => {} }) {
   return (
     <div
       className="flex items-center justify-between px-8"
@@ -18,7 +18,19 @@ export default function Header({ notificationCount = 3, onToggleSidebar }) {
         <Menu size={20} style={{ color: COLORS.textMuted }} />
       </button>
 
-      <div className="flex items-center gap-5">
+      <div className="flex items-center gap-4">
+        <button
+          type="button"
+          onClick={onToggleTheme}
+          className="rounded-md p-2 transition-colors hover:bg-slate-100"
+          aria-label="Toggle dark mode"
+        >
+          {themeMode === "dark" ? (
+            <Sun size={18} style={{ color: COLORS.textMuted }} />
+          ) : (
+            <Moon size={18} style={{ color: COLORS.textMuted }} />
+          )}
+        </button>
         <div className="relative cursor-pointer">
           <Bell size={19} style={{ color: COLORS.textMuted }} />
           {notificationCount > 0 && (
@@ -30,7 +42,7 @@ export default function Header({ notificationCount = 3, onToggleSidebar }) {
             </span>
           )}
         </div>
-        <Settings size={19} style={{ color: COLORS.textMuted }} className="cursor-pointer" />
+        <Settings size={19} style={{ color: COLORS.textMuted }} className="cursor-pointer" onClick={onOpenSettings} />
       </div>
     </div>
   );
