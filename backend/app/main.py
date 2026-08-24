@@ -6,14 +6,17 @@ ingestion utilities. It intentionally keeps logic small and delegates
 authentication and storage responsibilities to `backend.app.auth`.
 
 Endpoints include:
-- local ingestion: `/api/ingest/local-folder`
+- SharePoint ingestion: `/api/ingest/local-folder` (existing demo route)
 - authentication: `/api/auth/*` for register/login/mfa
 
 The file also demonstrates a simple startup hook that initializes the
 SQLite-backed auth DB.
 """
 
+import asyncio
 import json
+import logging
+import threading
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -21,15 +24,20 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from backend.app.mappers.local_file_mapper import map_local_files_to_canonical
-from backend.app.connectors.local_folder_connector import read_local_text_files
+from backend.app.connectors.sharepoint_connector import read_sharepoint_files
 from backend.app.rules.rule_handlers import apply_selected_rules
 from backend.app import auth
 import sqlite3
 
 
 BASE_FOLDER = Path(__file__).resolve().parents[2]
-INPUT_FOLDER = BASE_FOLDER / "local_data" / "input"
 OUTPUT_FOLDER = BASE_FOLDER / "local_data" / "output"
+POLL_INTERVAL_SECONDS = 300
+SHAREPOINT_POLL_RULE = "Knowledge Base Rules"
+
+logger = logging.getLogger(__name__)
+ingestion_lock = threading.Lock()
+polling_task = None
 
 app = FastAPI()
 
@@ -60,13 +68,41 @@ def read_root():
     return {"Hello": "World"}
 
 
+async def poll_sharepoint_ingestion():
+    while True:
+        await asyncio.sleep(POLL_INTERVAL_SECONDS)
+        try:
+            await asyncio.to_thread(run_sharepoint_ingestion, SHAREPOINT_POLL_RULE)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("Automatic SharePoint ingestion failed")
+
+
 @app.on_event("startup")
-def startup_event():
+async def startup_event():
+    global polling_task
+
     try:
         auth.init_db()
     except Exception:
         # If DB init fails, allow app to continue but log nothing here
         pass
+
+    polling_task = asyncio.create_task(poll_sharepoint_ingestion())
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    global polling_task
+
+    if polling_task is not None:
+        polling_task.cancel()
+        try:
+            await polling_task
+        except asyncio.CancelledError:
+            pass
+        polling_task = None
 
 
 @app.get("/items/{item_id}")
@@ -74,13 +110,37 @@ def read_item(item_id: int, q: str | None = None):
     return {"item_id": item_id, "q": q}
 
 
+def run_sharepoint_ingestion(rule):
+    """Run one SharePoint ingestion, shared by manual and automatic triggers."""
+    with ingestion_lock:
+        OUTPUT_FOLDER.mkdir(parents=True, exist_ok=True)
+
+        raw_files = read_sharepoint_files()
+        canonical_documents = map_local_files_to_canonical(raw_files)
+
+        for document in canonical_documents:
+            document = apply_selected_rules(document, rule)
+            output_name = Path(document["file_name"]).with_suffix(".json").name
+            output_path = OUTPUT_FOLDER / output_name
+            output_path.write_text(
+                json.dumps(document, indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
+
+        return {
+            "status": "success",
+            "processed": len(canonical_documents),
+            "rule": rule,
+        }
+
+
 @app.post("/api/ingest/local-folder")
 def ingest_local_folder(request: IngestionRequest):
     """
-    Ingest local text files into canonical JSON documents.
+    Ingest supported SharePoint files into canonical JSON documents.
 
-    This endpoint is a small demo that reads text files from the
-    configured `local_data/input` folder, maps them to canonical
+    This endpoint reads files from the configured SharePoint document
+    library, maps them to canonical
     document structures, applies a selected rule, and writes the JSON
     output to `local_data/output`.
     """
@@ -90,26 +150,7 @@ def ingest_local_folder(request: IngestionRequest):
             detail=f"Connector '{request.connector}' is not implemented by this endpoint.",
         )
 
-    INPUT_FOLDER.mkdir(parents=True, exist_ok=True)
-    OUTPUT_FOLDER.mkdir(parents=True, exist_ok=True)
-
-    raw_files = read_local_text_files(INPUT_FOLDER)
-    canonical_documents = map_local_files_to_canonical(raw_files)
-
-    for document in canonical_documents:
-        document = apply_selected_rules(document, request.rule or "Default Rule")
-        output_name = Path(document["file_name"]).with_suffix(".json").name
-        output_path = OUTPUT_FOLDER / output_name
-        output_path.write_text(
-            json.dumps(document, indent=2, ensure_ascii=False),
-            encoding="utf-8",
-        )
-
-    return {
-        "status": "success",
-        "processed": len(canonical_documents),
-        "rule": request.rule or "Default Rule",
-    }
+    return run_sharepoint_ingestion(request.rule or "Default Rule")
 
 
 @app.post("/api/auth/register")

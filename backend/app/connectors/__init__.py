@@ -3,4 +3,4 @@
 Place connector implementations here (local folder, SharePoint, etc.).
 """
 
-__all__ = ["local_folder_connector"]
+__all__ = ["local_folder_connector", "sharepoint_connector"]
