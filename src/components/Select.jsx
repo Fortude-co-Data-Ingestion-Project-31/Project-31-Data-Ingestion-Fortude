@@ -1,12 +1,13 @@
 import React from "react";
 import { COLORS } from "../theme";
 
-export default function Select({ value, onChange, options, placeholder }) {
+export default function Select({ value, onChange, options, placeholder, id }) {
   return (
     <select
+      id={id}
       value={value}
       onChange={onChange}
-      className="w-full px-3.5 py-2.5 rounded-md text-sm cursor-pointer"
+      className="w-full px-3.5 py-2.5 rounded-md text-base cursor-pointer"
       style={{
         background: COLORS.card,
         border: `1px solid ${COLORS.border}`,
