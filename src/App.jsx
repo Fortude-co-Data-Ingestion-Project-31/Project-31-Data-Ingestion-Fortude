@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { COLORS, FONTS, GOOGLE_FONTS_IMPORT, LIGHT_THEME, DARK_THEME } from "./theme";
-import { INITIAL_HISTORY, INITIAL_CONFIG } from "./data";
+import { INITIAL_HISTORY, API_BASE } from "./data";
 import Sidebar from "./components/Sidebar";
 import Header from "./components/Header";
 import PageBadge from "./components/PageBadge";
@@ -25,19 +25,28 @@ const PAGE_LABELS = {
   entry: "Ingestion Entry Page",
 };
 
+// Empty config shape used while the backend data is loading.
+const EMPTY_CONFIG = { connectors: [], rules: [], outputs: [] };
+
 // The root app component controls navigation, shared state, and the main layout.
 export default function App() {
   const [authenticated, setAuthenticated] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
   const [themeMode, setThemeMode] = useState("light");
+
   // Tracks which page is currently visible in the main content area.
   const [page, setPage] = useState("dashboard");
   // Controls whether the left-hand navigation panel is visible.
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
-  // These states hold the prototype data shown across the dashboard, history, and configuration pages.
-  const [history, setHistory] = useState(INITIAL_HISTORY);
-  const [config, setConfig] = useState(INITIAL_CONFIG);
+  // Ingestion history loaded from the backend.
+  const [history, setHistory] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
+
+  // Configuration loaded from the backend.  Each item is { id, name, created_at }.
+  const [config, setConfig] = useState(EMPTY_CONFIG);
+  const [configLoading, setConfigLoading] = useState(true);
+
   const [nextId, setNextId] = useState(7);
   const [activeEntryId, setActiveEntryId] = useState(1);
   const [toast, setToast] = useState("");
@@ -70,18 +79,11 @@ export default function App() {
     localStorage.setItem("theme", themeMode);
   }, [themeMode]);
 
-  // FUTURE BACKEND HOOK:
-  // Replace these mock state initializers with real API requests once the backend is available.
+  // Auth initialization
   useEffect(() => {
-    // Example:
-    // fetch("/api/ingestions")
-    //   .then((response) => response.json())
-    //   .then((data) => setHistory(data))
-    //   .catch(() => showToast("Unable to load ingestion history"));
-    // Check for stored token and verify with backend
     const token = localStorage.getItem("auth_token");
     if (token) {
-      fetch("http://127.0.0.1:8000/api/auth/verify", {
+      fetch(`${API_BASE}/api/auth/verify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token }),
@@ -102,7 +104,57 @@ export default function App() {
     }
   }, []);
 
-  // Opens or closes the navigation drawer on smaller screens or when the user clicks the menu button.
+
+  // ---------------------------------------------------------------------------
+  // Load configuration from the backend on mount.
+  // ---------------------------------------------------------------------------
+  const fetchConfig = async () => {
+    setConfigLoading(true);
+    try {
+      const [connRes, rulesRes, outputsRes] = await Promise.all([
+        fetch(`${API_BASE}/api/config/connectors`),
+        fetch(`${API_BASE}/api/config/rules`),
+        fetch(`${API_BASE}/api/config/outputs`),
+      ]);
+      const [connectors, rules, outputs] = await Promise.all([
+        connRes.json(),
+        rulesRes.json(),
+        outputsRes.json(),
+      ]);
+      setConfig({ connectors, rules, outputs });
+    } catch {
+      showToast("Unable to load configuration from the backend.");
+    } finally {
+      setConfigLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchConfig(); }, []);
+
+  // ---------------------------------------------------------------------------
+  // Load history from the backend on mount.
+  // ---------------------------------------------------------------------------
+  const fetchHistory = async () => {
+    setHistoryLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/history`);
+      if (res.ok) {
+        const data = await res.json();
+        setHistory(data);
+      }
+    } catch {
+      // silently fail — history just stays empty
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchHistory(); }, []);
+
+  // ---------------------------------------------------------------------------
+  // Navigation helpers
+  // ---------------------------------------------------------------------------
+
   const toggleSidebar = () => setIsSidebarOpen((prev) => !prev);
   const closeSidebar = () => setIsSidebarOpen(false);
 
@@ -113,62 +165,110 @@ export default function App() {
     goTo("dashboard");
   };
 
-  // Switches the visible page and scrolls the content area back to the top.
   const goTo = (p) => {
     setPage(p);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  // Opens a specific ingestion entry in the detail view.
   const openEntry = (id) => {
     setActiveEntryId(id);
     goTo("entry");
   };
 
-  // Removes an ingestion entry from the visible history list.
-  const deleteEntry = (id) => {
+  const deleteEntry = async (id) => {
+    try {
+      await fetch(`${API_BASE}/api/history/${id}`, { method: "DELETE" });
+    } catch {
+      // best-effort — remove from UI regardless
+    }
     setHistory((h) => h.filter((e) => e.id !== id));
     showToast(`Entry ${id} deleted`);
   };
 
-  // Deletes one row from a configuration category such as connectors or rules.
-  const removeConfigRow = (key, idx) => {
-    const label = config[key][idx];
-    setConfig((c) => ({ ...c, [key]: c[key].filter((_, i) => i !== idx) }));
-    showToast(`${label} deleted`);
-  };
+  // ---------------------------------------------------------------------------
+  // Config mutation helpers — talk to the backend, then refresh local state.
+  // ---------------------------------------------------------------------------
 
-  // Adds a new item to a configuration list and updates the UI immediately.
-  const addRow = (key, prefix) => {
-    setConfig((c) => {
-      const n = c[key].length + 1;
-      return { ...c, [key]: [...c[key], `${prefix} Entry ${n}`] };
-    });
-    showToast(`${prefix} Entry ${config[key].length + 1} added`);
-  };
+  const KEY_TO_PATH = { connectors: "connectors", rules: "rules", outputs: "outputs" };
 
-  // Handles submission of a new ingestion request from the form page.
-  const startIngestion = async () => {
+  const addRow = async (key, name) => {
     try {
-      const response = await fetch("http://127.0.0.1:8000/api/ingest/local-folder", {
+      const res = await fetch(`${API_BASE}/api/config/${KEY_TO_PATH[key]}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ connector: form.connector, rule: form.rules }),
+        body: JSON.stringify({ name }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        showToast(body.detail || "Failed to add item.");
+        return;
+      }
+      const newItem = await res.json();
+      setConfig((c) => ({ ...c, [key]: [...c[key], newItem] }));
+      showToast(`"${newItem.name}" added.`);
+    } catch {
+      showToast("Network error — could not add item.");
+    }
+  };
+
+  const removeConfigRow = async (key, id, name) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/config/${KEY_TO_PATH[key]}/${id}`, {
+        method: "DELETE",
+      });
+      if (!res.ok && res.status !== 404) {
+        showToast("Failed to delete item.");
+        return;
+      }
+      setConfig((c) => ({ ...c, [key]: c[key].filter((item) => item.id !== id) }));
+      showToast(`"${name}" deleted.`);
+    } catch {
+      showToast("Network error — could not delete item.");
+    }
+  };
+
+  // ---------------------------------------------------------------------------
+  // Ingestion submission
+  // ---------------------------------------------------------------------------
+
+  const startIngestion = async (options = {}) => {
+    try {
+      const response = await fetch(`${API_BASE}/api/ingest/local-folder`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          connector: form.connector,
+          rule: form.rules,
+          mapper: form.mapper,
+          outputs: form.outputs,
+        }),
       });
 
       if (!response.ok) {
-        throw new Error("Ingestion request failed");
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.detail || "Ingestion request failed");
       }
 
       const data = await response.json();
-      const entry = { id: nextId, ...form, outputs: [form.outputs] };
-      setHistory((h) => [...h, entry]);
-      setNextId((n) => n + 1);
-      showToast(`Ingestion complete - ${data.processed} document(s) processed`);
+
+      // Refresh history from the backend so it persists across reloads
+      await fetchHistory();
+
+      if (data.message) {
+        showToast(data.message);
+      } else {
+        showToast(`Ingestion complete — ${data.processed} document(s) processed`);
+      }
+
       setForm({ connector: "", mapper: "", rules: "", outputs: "" });
       goTo("dashboard");
     } catch (error) {
-      showToast("Ingestion failed. Please try again.");
+      if (options.onError) {
+        options.onError(error.message);
+      } else {
+        showToast(error.message || "Ingestion failed. Please try again.");
+      }
+      throw error;
     }
   };
 
@@ -189,12 +289,12 @@ export default function App() {
       <PageBadge label={PAGE_LABELS[page]} />
 
       <div className="flex rounded-xl overflow-hidden mx-6 mb-6 relative" style={{ border: `1px solid ${COLORS.border}`, background: COLORS.bg }}>
-        {/* Sidebar overlay removed — sidebar now opens/closes only via hamburger */}
+        {isSidebarOpen && (
+          <div className="fixed inset-0 z-20 bg-black/30 transition-opacity duration-200 md:hidden" onClick={closeSidebar} />
+        )}
 
         <div className="relative z-30">
-          {isSidebarOpen ? (
-            <Sidebar page={page} goTo={goTo} user={currentUser} onSignOut={signOut} />
-          ) : null}
+          {isSidebarOpen ? <Sidebar page={page} goTo={goTo} user={currentUser} onSignOut={signOut} onClose={closeSidebar} /> : null}
         </div>
 
         <div className="flex-1 min-w-0">
@@ -208,8 +308,8 @@ export default function App() {
 
           <div className="px-8 py-8">
             {page === "dashboard" && <Dashboard history={history} config={config} goTo={goTo} openEntry={openEntry} />}
-            {page === "ingest" && <NewIngestion form={form} setForm={setForm} onStart={startIngestion} />}
-            {page === "configure" && <Configure config={config} addRow={addRow} removeConfigRow={removeConfigRow} />}
+            {page === "ingest" && <NewIngestion form={form} setForm={setForm} config={config} onStart={startIngestion} />}
+            {page === "configure" && <Configure config={config} configLoading={configLoading} addRow={addRow} removeConfigRow={removeConfigRow} />}
             {page === "settings" && <Settings token={localStorage.getItem("auth_token")} currentUser={currentUser} onSaved={(username) => setCurrentUser(username)} goTo={goTo} />}
             {page === "change-username" && <ChangeUsername token={localStorage.getItem("auth_token")} currentUser={currentUser} onSaved={(username) => setCurrentUser(username)} goTo={goTo} />}
             {page === "history" && <History history={history} openEntry={openEntry} deleteEntry={deleteEntry} />}

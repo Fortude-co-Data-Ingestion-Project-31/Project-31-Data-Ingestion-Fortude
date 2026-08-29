@@ -23,7 +23,7 @@ def auth_header():
 @app.get("/jira/authentication_check")
 async def jira_me():
 
-    url = JIRA_BASE_URL + "/rest/api/3/myself"
+    url = JIRA_BASE_URL.rstrip("/") + "/rest/api/3/myself"
 
     client = app.state.client
 
@@ -42,10 +42,10 @@ async def get_my_issues():
     Fetch issues assigned to the authenticated user from Jira.
     """
     
-    url=JIRA_BASE_URL+"rest/api/3/search/jql"
+    url = JIRA_BASE_URL.rstrip("/") + "/rest/api/3/search/jql"
     
     params = {
-        "jql": "assignee = currentUser()",
+        "jql": "project = KAN order by created DESC",
         "maxResults": 5000,
         "fields": "*all"
     }
@@ -81,7 +81,7 @@ async def get_jira_fields():
     Fetch all Jira field metadata including custom fields.
     """
 
-    url = JIRA_BASE_URL + "rest/api/3/field"
+    url = JIRA_BASE_URL.rstrip("/") + "/rest/api/3/field"
 
     async with httpx.AsyncClient() as client:
         try:

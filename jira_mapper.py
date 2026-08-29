@@ -12,6 +12,7 @@ def get_nested_value(data, keys, default=None):
 def map_jira_issue_to_canonical(issue):
     fields = issue.get("fields", {})
     labels = fields.get("labels", [])
+    issue_type = (fields.get("issuetype") or {}).get("name")
 
     customer_tier = "Standard"
     for label in labels:
@@ -23,14 +24,14 @@ def map_jira_issue_to_canonical(issue):
         "ticket_id": issue.get("id"),
         "ticket_key": issue.get("key"),
         "title": fields.get("summary"),
-        "issue_type": fields.get("issuetype").get("name"),
+        "issue_type": issue_type,
         "description": str(fields.get("description") or ""),
         "status": get_nested_value(fields, ["status", "name"]),
         "priority": get_nested_value(fields, ["priority", "name"]),
         "assignee": get_nested_value(fields, ["assignee", "displayName"]),
         "created_at": fields.get("created"),
         "labels": labels,
-        "is_L3": "L3" in fields.get("issuetype").get("name"),
+        "is_L3": "L3" in (issue_type or ""),
         # placeholders until proper JIRA L3 custom fields are configured
         "customer_tier": customer_tier,
         "error_code": None,

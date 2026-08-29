@@ -8,8 +8,18 @@ import PageHeading from "../components/PageHeading";
 export default function Dashboard({ history, config, goTo, openEntry }) {
   // Shows the most recent five ingestion entries in reverse chronological order.
   const dashboardEntries = history.slice(-5).reverse();
-  // Calculates the total number of configuration entries across all config groups.
-  const totalConfig = Object.values(config).reduce((a, b) => a + b.length, 0);
+
+  // Total number of configuration items across all categories (connectors + rules + outputs).
+  const totalConfig =
+    config.connectors.length + config.rules.length + config.outputs.length;
+
+  // Interleave the three config categories into a flat preview list for the card,
+  // showing a maximum of 5 items so the card stays compact.
+  const configPreview = [
+    ...config.connectors.map((c) => ({ name: c.name, sub: "Connector" })),
+    ...config.rules.map((r) => ({ name: r.name, sub: "Rule" })),
+    ...config.outputs.map((o) => ({ name: o.name, sub: "Output" })),
+  ].slice(0, 5);
 
   return (
     <section>
@@ -33,11 +43,13 @@ export default function Dashboard({ history, config, goTo, openEntry }) {
         </Card>
 
         <Card title="Configurations" count={totalConfig} footer="View all →" onFooterClick={() => goTo("configure")}>
-          <Row label="Infor Sales" sub="Connector" onEdit={() => goTo("configure")} />
-          <Row label="Infor Sales Rules" sub="Rule" onEdit={() => goTo("configure")} />
-          <Row label="PostgreSQL" sub="Output" onEdit={() => goTo("configure")} />
-          <Row label="Jira Support" sub="Connector" onEdit={() => goTo("configure")} />
-          <Row label="L3 Ticket Rules" sub="Rule" onEdit={() => goTo("configure")} />
+          {configPreview.length === 0 ? (
+            <div className="text-sm text-[color:var(--textMuted)] py-2">No configuration items yet.</div>
+          ) : (
+            configPreview.map(({ name, sub }) => (
+              <Row key={`${sub}-${name}`} label={name} sub={sub} onEdit={() => goTo("configure")} />
+            ))
+          )}
         </Card>
       </div>
     </section>

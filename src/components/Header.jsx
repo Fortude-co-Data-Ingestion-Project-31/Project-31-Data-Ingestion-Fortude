@@ -3,7 +3,7 @@ import { Menu, Bell, Settings, Moon, Sun } from "lucide-react";
 import { COLORS } from "../theme";
 
 // The top header bar provides the app title actions and the menu button for the sidebar.
-export default function Header({ notificationCount = 3, onToggleSidebar, onOpenSettings = () => {}, themeMode = "light", onToggleTheme = () => {} }) {
+export default function Header({ notificationCount = 3, onToggleSidebar, onOpenSettings = () => {}, themeMode = "light", onToggleTheme = () => {}, jiraPolling = false }) {
   return (
     <div
       className="flex items-center justify-between px-8"
@@ -19,6 +19,12 @@ export default function Header({ notificationCount = 3, onToggleSidebar, onOpenS
       </button>
 
       <div className="flex items-center gap-4">
+        {jiraPolling && (
+          <div className="flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold" style={{ background: "#dcfce7", color: "#16a34a" }}>
+            <span className="inline-block w-2 h-2 rounded-full animate-pulse" style={{ background: "#16a34a" }} />
+            Jira polling
+          </div>
+        )}
         <button
           type="button"
           onClick={onToggleTheme}
