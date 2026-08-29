@@ -8,7 +8,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-
+from backend.app.connectors.local_folder_connector import read_local_text_files
 from backend.app.mappers.local_file_mapper import map_local_files_to_canonical
 from backend.app.connectors.sharepoint_connector import read_sharepoint_files
 from backend.app.rules.rule_handlers import apply_selected_rules
@@ -28,10 +28,12 @@ from backend.app.connectors.connectors_db import (
     list_history,
     delete_history_entry,
 )
-
-
 BASE_FOLDER = Path(__file__).resolve().parents[2]
 OUTPUT_FOLDER = BASE_FOLDER / "local_data" / "output"
+INPUT_FOLDER = BASE_FOLDER / "local_data" / "input"  # ADD THIS LINE
+
+# BASE_FOLDER = Path(__file__).resolve().parents[2]
+# OUTPUT_FOLDER = BASE_FOLDER / "local_data" / "output"
 POLL_INTERVAL_SECONDS = 300
 SHAREPOINT_POLL_RULE = "Knowledge Base Rules"
 
