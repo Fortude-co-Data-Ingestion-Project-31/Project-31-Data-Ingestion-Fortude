@@ -4,22 +4,22 @@ from pathlib import Path
 
 def map_local_file_to_canonical(raw_file):
     file_name = raw_file.get("file_name")
+    modified_at = raw_file.get("modified_at")
+    if isinstance(modified_at, (int, float)):
+        modified_at = datetime.fromtimestamp(modified_at, timezone.utc).isoformat()
 
     canonical_document = {
-        "source": "local_folder",
+        "source": raw_file.get("source", "local_folder"),
         "document_id": file_name,
         "title": Path(file_name).stem,
         "file_name": file_name,
         "file_type": raw_file.get("file_type"),
         "file_size": raw_file.get("file_size"),
-        "modified_at": datetime.fromtimestamp(
-            raw_file.get("modified_at"), timezone.utc
-        ).isoformat(),
-        # Placeholders until SharePoint / Microsoft Graph access is available.
-        "author": None,
+        "modified_at": modified_at,
+        "author": raw_file.get("author"),
         "tags": [],
-        "source_url": None,
-        "version": None,
+        "source_url": raw_file.get("source_url"),
+        "version": raw_file.get("version"),
         "view_count": None,
         "content": raw_file.get("content"),
     }

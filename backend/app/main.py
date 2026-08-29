@@ -1,5 +1,7 @@
 import json
 from contextlib import asynccontextmanager
+import logging
+import threading
 from pathlib import Path
 import httpx
 from fastapi import FastAPI, HTTPException
@@ -8,7 +10,7 @@ from pydantic import BaseModel
 
 
 from backend.app.mappers.local_file_mapper import map_local_files_to_canonical
-from backend.app.connectors.local_folder_connector import read_local_text_files
+from backend.app.connectors.sharepoint_connector import read_sharepoint_files
 from backend.app.rules.rule_handlers import apply_selected_rules
 from backend.app.auth import init_db as init_auth_db
 from backend.app.connectors.connectors_db import (
@@ -29,8 +31,13 @@ from backend.app.connectors.connectors_db import (
 
 
 BASE_FOLDER = Path(__file__).resolve().parents[2]
-INPUT_FOLDER = BASE_FOLDER / "local_data" / "input"
 OUTPUT_FOLDER = BASE_FOLDER / "local_data" / "output"
+POLL_INTERVAL_SECONDS = 300
+SHAREPOINT_POLL_RULE = "Knowledge Base Rules"
+
+logger = logging.getLogger(__name__)
+ingestion_lock = threading.Lock()
+polling_task = None
 
 
 # ---------------------------------------------------------------------------
@@ -85,6 +92,30 @@ def read_root():
 @app.get("/items/{item_id}")
 def read_item(item_id: int, q: str | None = None):
     return {"item_id": item_id, "q": q}
+
+
+def run_sharepoint_ingestion(rule):
+    """Run one SharePoint ingestion, shared by manual and automatic triggers."""
+    with ingestion_lock:
+        OUTPUT_FOLDER.mkdir(parents=True, exist_ok=True)
+
+        raw_files = read_sharepoint_files()
+        canonical_documents = map_local_files_to_canonical(raw_files)
+
+        for document in canonical_documents:
+            document = apply_selected_rules(document, rule)
+            output_name = Path(document["file_name"]).with_suffix(".json").name
+            output_path = OUTPUT_FOLDER / output_name
+            output_path.write_text(
+                json.dumps(document, indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
+
+        return {
+            "status": "success",
+            "processed": len(canonical_documents),
+            "rule": rule,
+        }
 
 
 import asyncio

@@ -3,3 +3,6 @@ pydantic
 python-dotenv
 kafka-python
 pytest
+requests
+python-docx
+pypdf
