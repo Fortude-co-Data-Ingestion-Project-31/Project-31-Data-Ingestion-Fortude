@@ -1,4 +1,5 @@
 import json
+import asyncio
 from contextlib import asynccontextmanager
 import logging
 import threading
@@ -10,7 +11,11 @@ from pydantic import BaseModel
 
 from backend.app.connectors.local_folder_connector import read_local_text_files
 from backend.app.mappers.local_file_mapper import map_local_files_to_canonical
-from backend.app.connectors.sharepoint_connector import read_sharepoint_files
+from backend.app.connectors.sharepoint_connector import (
+    SharePointDeltaStateError,
+    get_sharepoint_drive_id,
+    read_sharepoint_delta,
+)
 from backend.app.rules.rule_handlers import apply_selected_rules
 from backend.app.auth import init_db as init_auth_db
 from backend.app.connectors.connectors_db import (
@@ -27,6 +32,10 @@ from backend.app.connectors.connectors_db import (
     add_history_entry,
     list_history,
     delete_history_entry,
+    get_sharepoint_delta_link,
+    clear_sharepoint_delta_link,
+    get_sharepoint_item_mappings,
+    save_sharepoint_sync_state,
 )
 BASE_FOLDER = Path(__file__).resolve().parents[2]
 OUTPUT_FOLDER = BASE_FOLDER / "local_data" / "output"
@@ -48,9 +57,19 @@ polling_task = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global polling_task
     init_auth_db()
     init_config_db()
-    yield
+    polling_task = asyncio.create_task(poll_sharepoint_ingestion())
+    try:
+        yield
+    finally:
+        polling_task.cancel()
+        try:
+            await polling_task
+        except asyncio.CancelledError:
+            pass
+        polling_task = None
 
 
 app = FastAPI(lifespan=lifespan)
@@ -97,30 +116,80 @@ def read_item(item_id: int, q: str | None = None):
 
 
 def run_sharepoint_ingestion(rule):
-    """Run one SharePoint ingestion, shared by manual and automatic triggers."""
+    """Synchronize SharePoint changes for both manual and automatic triggers."""
     with ingestion_lock:
         OUTPUT_FOLDER.mkdir(parents=True, exist_ok=True)
 
-        raw_files = read_sharepoint_files()
-        canonical_documents = map_local_files_to_canonical(raw_files)
+        drive_id = get_sharepoint_drive_id()
+        previous_delta_link = get_sharepoint_delta_link(drive_id)
+        try:
+            delta_result = read_sharepoint_delta(previous_delta_link)
+        except SharePointDeltaStateError:
+            clear_sharepoint_delta_link(drive_id)
+            previous_delta_link = None
+            delta_result = read_sharepoint_delta()
 
-        for document in canonical_documents:
+        mappings = get_sharepoint_item_mappings(drive_id)
+        mapping_upserts = {}
+        mapping_deletes = set()
+        processed = 0
+        seen_item_ids = set()
+
+        for change in delta_result["changes"]:
+            item_id = change["item_id"]
+            seen_item_ids.add(item_id)
+            previous_output_name = mappings.get(item_id)
+
+            if change["deleted"] or not change["supported"]:
+                if previous_output_name:
+                    (OUTPUT_FOLDER / previous_output_name).unlink(missing_ok=True)
+                    mapping_deletes.add(item_id)
+                continue
+
+            document = map_local_files_to_canonical([change["record"]])[0]
             document = apply_selected_rules(document, rule)
             output_name = Path(document["file_name"]).with_suffix(".json").name
-            output_path = OUTPUT_FOLDER / output_name
-            output_path.write_text(
+            if previous_output_name and previous_output_name != output_name:
+                (OUTPUT_FOLDER / previous_output_name).unlink(missing_ok=True)
+            (OUTPUT_FOLDER / output_name).write_text(
                 json.dumps(document, indent=2, ensure_ascii=False),
                 encoding="utf-8",
             )
+            mapping_upserts[item_id] = output_name
+            processed += 1
+
+        # A fresh enumeration is authoritative, so remove stale tracked items.
+        if previous_delta_link is None:
+            for item_id, output_name in mappings.items():
+                if item_id not in seen_item_ids:
+                    (OUTPUT_FOLDER / output_name).unlink(missing_ok=True)
+                    mapping_deletes.add(item_id)
+
+        save_sharepoint_sync_state(
+            drive_id,
+            delta_result["delta_link"],
+            mapping_upserts,
+            mapping_deletes,
+        )
 
         return {
             "status": "success",
-            "processed": len(canonical_documents),
+            "processed": processed,
             "rule": rule,
         }
 
 
-import asyncio
+async def poll_sharepoint_ingestion():
+    while True:
+        await asyncio.sleep(POLL_INTERVAL_SECONDS)
+        try:
+            await asyncio.to_thread(run_sharepoint_ingestion, SHAREPOINT_POLL_RULE)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("Automatic SharePoint ingestion failed")
+
+
 import httpx
 from fastapi import BackgroundTasks
 from datetime import datetime
@@ -228,7 +297,22 @@ async def ingest_local_folder(request: IngestionRequest, background_tasks: Backg
             "rule": request.rule or "Default Rule",
         }
 
-    # Default fallback for SharePoint / local files
+    if "sharepoint" in connector_name:
+        result = await asyncio.to_thread(
+            run_sharepoint_ingestion,
+            request.rule or "Default Rule",
+        )
+        add_history_entry(
+            connector=request.connector,
+            mapper=request.mapper or "",
+            rules=request.rule or "Default Rule",
+            outputs=request.outputs or "",
+            status="completed",
+            processed=result["processed"],
+        )
+        return result
+
+    # Default fallback for local files and other existing connector names.
     INPUT_FOLDER.mkdir(parents=True, exist_ok=True)
     OUTPUT_FOLDER.mkdir(parents=True, exist_ok=True)
 

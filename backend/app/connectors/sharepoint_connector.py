@@ -15,6 +15,10 @@ GRAPH_BASE_URL = "https://graph.microsoft.com/v1.0"
 SUPPORTED_FILE_TYPES = {".txt", ".docx", ".pdf"}
 
 
+class SharePointDeltaStateError(RuntimeError):
+    """Raised when Graph no longer accepts a saved delta cursor."""
+
+
 def _required_setting(name):
     value = os.getenv(name)
     if not value:
@@ -73,11 +77,8 @@ def _author_from_item(item):
     return person.get("displayName") or person.get("email") or person.get("id")
 
 
-def read_sharepoint_files(session=None):
-    """Return supported files from the configured library root as raw records."""
+def _resolve_drive(session):
     load_dotenv()
-    session = session or requests.Session()
-
     tenant_id = _required_setting("TENANT_ID")
     client_id = _required_setting("CLIENT_ID")
     client_secret = _required_setting("CLIENT_SECRET")
@@ -104,35 +105,89 @@ def read_sharepoint_files(session=None):
     if drive is None:
         raise RuntimeError(f"SharePoint document library not found: {library_name}")
 
-    items = _get_all_items(
-        session, f"{GRAPH_BASE_URL}/drives/{drive['id']}/root/children", headers
+    root = _get_json(
+        session, f"{GRAPH_BASE_URL}/drives/{drive['id']}/root", headers
     )
-    raw_file_records = []
+    return drive["id"], root["id"], headers
 
-    for item in items:
+
+def get_sharepoint_drive_id(session=None):
+    """Resolve and return the configured SharePoint document-library drive ID."""
+    session = session or requests.Session()
+    drive_id, _, _ = _resolve_drive(session)
+    return drive_id
+
+
+def _download_file_record(session, drive_id, headers, item):
+    file_name = item.get("name", "")
+    file_type = Path(file_name).suffix.lower()
+    download_response = session.get(
+        f"{GRAPH_BASE_URL}/drives/{drive_id}/items/{item['id']}/content",
+        headers=headers,
+        timeout=60,
+    )
+    download_response.raise_for_status()
+    return {
+        "source": "sharepoint",
+        "file_name": file_name,
+        "file_type": file_type,
+        "file_size": item.get("size"),
+        "modified_at": item.get("lastModifiedDateTime"),
+        "content": _extract_content(file_name, download_response.content),
+        "source_url": item.get("webUrl"),
+        "author": _author_from_item(item),
+        "version": item.get("eTag") or item.get("cTag"),
+    }
+
+
+def read_sharepoint_delta(delta_url=None, session=None):
+    """Return direct-root changes and the final cursor for the configured drive."""
+    session = session or requests.Session()
+    drive_id, root_id, headers = _resolve_drive(session)
+    url = delta_url or f"{GRAPH_BASE_URL}/drives/{drive_id}/root/delta"
+    latest_by_id = {}
+    final_delta_link = None
+
+    while url:
+        response = session.get(url, headers=headers, timeout=30)
+        if response.status_code in (404, 410) and delta_url:
+            raise SharePointDeltaStateError("Saved SharePoint delta cursor is invalid.")
+        response.raise_for_status()
+        page = response.json()
+        for item in page.get("value", []):
+            item_id = item.get("id")
+            if item_id:
+                latest_by_id[item_id] = item
+        url = page.get("@odata.nextLink")
+        if not url:
+            final_delta_link = page.get("@odata.deltaLink")
+
+    if not final_delta_link:
+        raise RuntimeError("Microsoft Graph delta response did not include @odata.deltaLink.")
+
+    changes = []
+    for item_id, item in latest_by_id.items():
+        deleted = "deleted" in item
         file_name = item.get("name", "")
         file_type = Path(file_name).suffix.lower()
-        if "file" not in item or file_type not in SUPPORTED_FILE_TYPES:
-            continue
-
-        download_response = session.get(
-            f"{GRAPH_BASE_URL}/drives/{drive['id']}/items/{item['id']}/content",
-            headers=headers,
-            timeout=60,
+        is_direct_root_file = (
+            "file" in item
+            and (item.get("parentReference") or {}).get("id") == root_id
         )
-        download_response.raise_for_status()
-        raw_file_records.append(
-            {
-                "source": "sharepoint",
-                "file_name": file_name,
-                "file_type": file_type,
-                "file_size": item.get("size"),
-                "modified_at": item.get("lastModifiedDateTime"),
-                "content": _extract_content(file_name, download_response.content),
-                "source_url": item.get("webUrl"),
-                "author": _author_from_item(item),
-                "version": item.get("eTag") or item.get("cTag"),
-            }
-        )
+        supported = is_direct_root_file and file_type in SUPPORTED_FILE_TYPES
+        change = {
+            "item_id": item_id,
+            "deleted": deleted,
+            "supported": supported,
+            "record": None,
+        }
+        if supported and not deleted:
+            change["record"] = _download_file_record(
+                session, drive_id, headers, item
+            )
+        changes.append(change)
 
-    return raw_file_records
+    return {
+        "changes": changes,
+        "delta_link": final_delta_link,
+    }

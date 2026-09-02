@@ -91,6 +91,25 @@ def init_config_db() -> None:
             """
         )
 
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS sharepoint_delta_state (
+                drive_id   TEXT PRIMARY KEY,
+                delta_link TEXT NOT NULL
+            )
+            """
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS sharepoint_item_state (
+                drive_id        TEXT NOT NULL,
+                item_id         TEXT NOT NULL,
+                output_filename TEXT NOT NULL,
+                PRIMARY KEY (drive_id, item_id)
+            )
+            """
+        )
+
         conn.commit()
 
         # Insert seeds — silently skipped if rows already exist.
@@ -265,5 +284,79 @@ def delete_history_entry(entry_id: int) -> bool:
         cur.execute("DELETE FROM ingestion_history WHERE id = ?", (entry_id,))
         conn.commit()
         return cur.rowcount > 0
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Public API — SharePoint delta synchronization state
+# ---------------------------------------------------------------------------
+
+def get_sharepoint_delta_link(drive_id: str) -> str | None:
+    conn = _get_conn()
+    try:
+        row = conn.execute(
+            "SELECT delta_link FROM sharepoint_delta_state WHERE drive_id = ?",
+            (drive_id,),
+        ).fetchone()
+        return row["delta_link"] if row else None
+    finally:
+        conn.close()
+
+
+def clear_sharepoint_delta_link(drive_id: str) -> None:
+    conn = _get_conn()
+    try:
+        conn.execute("DELETE FROM sharepoint_delta_state WHERE drive_id = ?", (drive_id,))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_sharepoint_item_mappings(drive_id: str) -> dict[str, str]:
+    conn = _get_conn()
+    try:
+        rows = conn.execute(
+            "SELECT item_id, output_filename FROM sharepoint_item_state WHERE drive_id = ?",
+            (drive_id,),
+        ).fetchall()
+        return {row["item_id"]: row["output_filename"] for row in rows}
+    finally:
+        conn.close()
+
+
+def save_sharepoint_sync_state(
+    drive_id: str,
+    delta_link: str,
+    mapping_upserts: dict[str, str],
+    mapping_deletes: set[str],
+) -> None:
+    """Atomically update item mappings and advance the completed delta cursor."""
+    conn = _get_conn()
+    try:
+        for item_id in mapping_deletes:
+            conn.execute(
+                "DELETE FROM sharepoint_item_state WHERE drive_id = ? AND item_id = ?",
+                (drive_id, item_id),
+            )
+        for item_id, output_filename in mapping_upserts.items():
+            conn.execute(
+                """
+                INSERT INTO sharepoint_item_state (drive_id, item_id, output_filename)
+                VALUES (?, ?, ?)
+                ON CONFLICT(drive_id, item_id)
+                DO UPDATE SET output_filename = excluded.output_filename
+                """,
+                (drive_id, item_id, output_filename),
+            )
+        conn.execute(
+            """
+            INSERT INTO sharepoint_delta_state (drive_id, delta_link)
+            VALUES (?, ?)
+            ON CONFLICT(drive_id) DO UPDATE SET delta_link = excluded.delta_link
+            """,
+            (drive_id, delta_link),
+        )
+        conn.commit()
     finally:
         conn.close()
