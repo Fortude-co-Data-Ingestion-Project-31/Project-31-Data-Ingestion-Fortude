@@ -1,11 +1,5 @@
 from fastapi import FastAPI
 import httpx
-<<<<<<< Updated upstream
-import asyncio
-
-app = FastAPI()
-
-=======
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -112,7 +106,6 @@ class ConfigItemCreate(BaseModel):
 # ---------------------------------------------------------------------------
 # Existing endpoints
 # ---------------------------------------------------------------------------
->>>>>>> Stashed changes
 
 @app.get("/items/{item_id}")
 def read_item(item_id: int, q: str | None = None):
@@ -126,8 +119,6 @@ async def main():
 
 asyncio.run(main()) 
 
-<<<<<<< Updated upstream
-=======
         mappings = get_sharepoint_item_mappings(drive_id)
         mapping_upserts = {}
         mapping_deletes = set()
@@ -550,4 +541,3 @@ def change_user(payload: dict):
         raise HTTPException(status_code=400, detail="username already exists")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
->>>>>>> Stashed changes
