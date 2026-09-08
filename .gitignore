@@ -33,3 +33,5 @@ coverage/
 Thumbs.db
 .exe
 .build
+node_modules/
+local_data/

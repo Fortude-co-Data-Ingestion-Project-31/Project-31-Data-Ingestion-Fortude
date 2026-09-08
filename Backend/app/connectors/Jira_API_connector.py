@@ -1,26 +1,16 @@
 from fastapi import FastAPI, HTTPException, Query
-from contextlib import asynccontextmanager
 import httpx
-import base64
-from connector_config import JIRA_BASE_URL,JIRA_EMAIL,JIRA_API_TOKEN
+from connectors.connector_config import JIRA_BASE_URL,JIRA_EMAIL,JIRA_API_TOKEN
 from pydantic import BaseModel
 
 class JiraSearch(BaseModel):
     jql: str
     max_results: int = 50
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    app.state.client = httpx.AsyncClient(timeout=30.0)
-    yield
-    await app.state.client.aclose()
-
-app = FastAPI(lifespan=lifespan)
 
 def auth_header():
     return httpx.BasicAuth(JIRA_EMAIL, JIRA_API_TOKEN)
 
-@app.get("/jira/authentication_check")
 async def jira_me():
 
     url = JIRA_BASE_URL + "/rest/api/3/myself"
@@ -36,7 +26,6 @@ async def jira_me():
 
     return response.json()
 
-@app.get("/jira/my_issues")
 async def get_my_issues():
     """
     Fetch issues assigned to the authenticated user from Jira.
@@ -75,7 +64,6 @@ async def get_my_issues():
                 detail=f"Internal Server Error: {str(e)}"
             )
         
-@app.get("/jira/get_fields")
 async def get_jira_fields():
     """
     Fetch all Jira field metadata including custom fields.
