@@ -1,12 +1,16 @@
-from fastapi import FastAPI
+import json
+import asyncio
+from contextlib import asynccontextmanager
+import logging
+import threading
+from pathlib import Path
 import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from mapper_and_ruler.jira_mapper import map_jira_response_to_canonical
-from mapper_and_ruler.jira_transformer import transform_canonical_tickets_for_l3
+
 from connectors.local_folder_connector import read_local_text_files
-from mapper_and_ruler.local_file_mapper import map_local_files_to_canonical
+from mappers.local_file_mapper import map_local_files_to_canonical
 from connectors.sharepoint_connector import (
     SharePointDeltaStateError,
     get_sharepoint_drive_id,
@@ -37,17 +41,17 @@ from fastapi import BackgroundTasks
 # Import Jira utilities directly from the project root
 import sys
 sys.path.append('.')
-from connectors.Jira_API_connector import get_my_issues
+from connectors.Jira_API_connector import get_my_issues,get_jira_fields
+from mappers.jira_mapper import map_jira_response_to_canonical
+from mappers.jira_transformer import transform_canonical_tickets_for_l3
 import sqlite3
-
-@app.get("/")
-def read_root():
-    return {"Hello": "World"}
 
 BASE_FOLDER = Path(__file__).resolve().parents[2]
 OUTPUT_FOLDER = BASE_FOLDER / "local_data" / "output"
 INPUT_FOLDER = BASE_FOLDER / "local_data" / "input"  # ADD THIS LINE
 
+# BASE_FOLDER = Path(__file__).resolve().parents[2]
+# OUTPUT_FOLDER = BASE_FOLDER / "local_data" / "output"
 POLL_INTERVAL_SECONDS = 300
 SHAREPOINT_POLL_RULE = "Knowledge Base Rules"
 
@@ -110,17 +114,29 @@ class ConfigItemCreate(BaseModel):
 # Existing endpoints
 # ---------------------------------------------------------------------------
 
+@app.get("/")
+def read_root():
+    return {"Hello": "World"}
+
+
 @app.get("/items/{item_id}")
 def read_item(item_id: int, q: str | None = None):
     return {"item_id": item_id, "q": q}
 
 
-async def main():
-    async with httpx.AsyncClient() as client:
-        response = await client.get('https://www.example.com/')
-        print(response.status_code)
+def run_sharepoint_ingestion(rule):
+    """Synchronize SharePoint changes for both manual and automatic triggers."""
+    with ingestion_lock:
+        OUTPUT_FOLDER.mkdir(parents=True, exist_ok=True)
 
-asyncio.run(main()) 
+        drive_id = get_sharepoint_drive_id()
+        previous_delta_link = get_sharepoint_delta_link(drive_id)
+        try:
+            delta_result = read_sharepoint_delta(previous_delta_link)
+        except SharePointDeltaStateError:
+            clear_sharepoint_delta_link(drive_id)
+            previous_delta_link = None
+            delta_result = read_sharepoint_delta()
 
         mappings = get_sharepoint_item_mappings(drive_id)
         mapping_upserts = {}
@@ -182,7 +198,6 @@ async def poll_sharepoint_ingestion():
         except Exception:
             logger.exception("Automatic SharePoint ingestion failed")
 
-
 async def poll_jira(rule: str):
     """Polls Jira every 5 minutes, transforms data, and saves to JSON."""
     while True:
@@ -190,9 +205,10 @@ async def poll_jira(rule: str):
         try:
             # 1. Fetch raw data from Jira directly (no FastAPI wrapper)
             jira_data = await get_my_issues()
+            print(jira_data)
             print(f"DEBUG: Jira API returned {jira_data.get('total')} tickets.")
             # 2. Map to canonical schema
-            canonical_tickets =map_jira_response_to_canonical(jira_data)
+            canonical_tickets = map_jira_response_to_canonical(jira_data)
             print(f"DEBUG: Mapper successfully processed {len(canonical_tickets)} tickets.")
             # 3. Apply rules / transformations based on user selection
             if "L3" in (rule or ""):
@@ -415,6 +431,7 @@ def remove_history_entry(entry_id: int):
 # ---------------------------------------------------------------------------
 # Auth Endpoints
 # ---------------------------------------------------------------------------
+
 
 @app.post("/api/auth/register")
 def register(payload: dict):
