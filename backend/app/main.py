@@ -1,24 +1,26 @@
-import json
-import asyncio
-from contextlib import asynccontextmanager
-import logging
-import threading
-from pathlib import Path
+from fastapi import FastAPI
 import httpx
+<<<<<<< Updated upstream
+import asyncio
+
+app = FastAPI()
+
+=======
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-
-from backend.app.connectors.local_folder_connector import read_local_text_files
-from backend.app.mappers.local_file_mapper import map_local_files_to_canonical
-from backend.app.connectors.sharepoint_connector import (
+from mapper_and_ruler.jira_mapper import map_jira_response_to_canonical
+from mapper_and_ruler.jira_transformer import transform_canonical_tickets_for_l3
+from connectors.local_folder_connector import read_local_text_files
+from mapper_and_ruler.local_file_mapper import map_local_files_to_canonical
+from connectors.sharepoint_connector import (
     SharePointDeltaStateError,
     get_sharepoint_drive_id,
     read_sharepoint_delta,
 )
-from backend.app.rules.rule_handlers import apply_selected_rules
-from backend.app.auth import init_db as init_auth_db
-from backend.app.connectors.connectors_db import (
+from rules.rule_handlers import apply_selected_rules
+import auth
+from connectors.connectors_db import (
     init_config_db,
     list_connectors,
     add_connector,
@@ -37,12 +39,18 @@ from backend.app.connectors.connectors_db import (
     get_sharepoint_item_mappings,
     save_sharepoint_sync_state,
 )
+from fastapi import BackgroundTasks
+# Import Jira utilities directly from the project root
+import sys
+sys.path.append('.')
+from connectors.Jira_API_connector import get_my_issues
+import sqlite3
+
+
 BASE_FOLDER = Path(__file__).resolve().parents[2]
 OUTPUT_FOLDER = BASE_FOLDER / "local_data" / "output"
 INPUT_FOLDER = BASE_FOLDER / "local_data" / "input"  # ADD THIS LINE
 
-# BASE_FOLDER = Path(__file__).resolve().parents[2]
-# OUTPUT_FOLDER = BASE_FOLDER / "local_data" / "output"
 POLL_INTERVAL_SECONDS = 300
 SHAREPOINT_POLL_RULE = "Knowledge Base Rules"
 
@@ -58,7 +66,7 @@ polling_task = None
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global polling_task
-    init_auth_db()
+    auth.init_db()
     init_config_db()
     polling_task = asyncio.create_task(poll_sharepoint_ingestion())
     try:
@@ -104,31 +112,22 @@ class ConfigItemCreate(BaseModel):
 # ---------------------------------------------------------------------------
 # Existing endpoints
 # ---------------------------------------------------------------------------
-
-@app.get("/")
-def read_root():
-    return {"Hello": "World"}
-
+>>>>>>> Stashed changes
 
 @app.get("/items/{item_id}")
 def read_item(item_id: int, q: str | None = None):
     return {"item_id": item_id, "q": q}
 
 
-def run_sharepoint_ingestion(rule):
-    """Synchronize SharePoint changes for both manual and automatic triggers."""
-    with ingestion_lock:
-        OUTPUT_FOLDER.mkdir(parents=True, exist_ok=True)
+async def main():
+    async with httpx.AsyncClient() as client:
+        response = await client.get('https://www.example.com/')
+        print(response.status_code)
 
-        drive_id = get_sharepoint_drive_id()
-        previous_delta_link = get_sharepoint_delta_link(drive_id)
-        try:
-            delta_result = read_sharepoint_delta(previous_delta_link)
-        except SharePointDeltaStateError:
-            clear_sharepoint_delta_link(drive_id)
-            previous_delta_link = None
-            delta_result = read_sharepoint_delta()
+asyncio.run(main()) 
 
+<<<<<<< Updated upstream
+=======
         mappings = get_sharepoint_item_mappings(drive_id)
         mapping_upserts = {}
         mapping_deletes = set()
@@ -190,45 +189,16 @@ async def poll_sharepoint_ingestion():
             logger.exception("Automatic SharePoint ingestion failed")
 
 
-import httpx
-from fastapi import BackgroundTasks
-from datetime import datetime
-
-# Import Jira utilities directly from the project root
-import sys
-sys.path.append('.')
-from connector_config import JIRA_BASE_URL, JIRA_EMAIL, JIRA_API_TOKEN
-from jira_mapper import map_jira_response_to_canonical
-from jira_transformer import transform_canonical_tickets_for_l3
-
-async def _fetch_jira_issues() -> dict:
-    """Make a direct httpx call to the Jira API, bypassing FastAPI route wrappers."""
-    url = JIRA_BASE_URL.rstrip("/") + "/rest/api/3/search/jql"
-    params = {
-        "jql": "project = KAN order by created DESC",
-        "maxResults": 5000,
-        "fields": "*all",
-    }
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        response = await client.get(
-            url,
-            params=params,
-            auth=httpx.BasicAuth(JIRA_EMAIL, JIRA_API_TOKEN),
-            headers={"Accept": "application/json"},
-        )
-        response.raise_for_status()
-        return response.json()
-
 async def poll_jira(rule: str):
     """Polls Jira every 5 minutes, transforms data, and saves to JSON."""
     while True:
         print(f"Polling Jira... (using rule: {rule})")
         try:
             # 1. Fetch raw data from Jira directly (no FastAPI wrapper)
-            jira_data = await _fetch_jira_issues()
+            jira_data = await get_my_issues()
             print(f"DEBUG: Jira API returned {jira_data.get('total')} tickets.")
             # 2. Map to canonical schema
-            canonical_tickets = map_jira_response_to_canonical(jira_data)
+            canonical_tickets =map_jira_response_to_canonical(jira_data)
             print(f"DEBUG: Mapper successfully processed {len(canonical_tickets)} tickets.")
             # 3. Apply rules / transformations based on user selection
             if "L3" in (rule or ""):
@@ -452,9 +422,6 @@ def remove_history_entry(entry_id: int):
 # Auth Endpoints
 # ---------------------------------------------------------------------------
 
-import sqlite3
-from backend.app import auth
-
 @app.post("/api/auth/register")
 def register(payload: dict):
     username = payload.get("username")
@@ -583,3 +550,4 @@ def change_user(payload: dict):
         raise HTTPException(status_code=400, detail="username already exists")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+>>>>>>> Stashed changes
