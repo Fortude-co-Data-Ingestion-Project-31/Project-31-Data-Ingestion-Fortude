@@ -1,8 +1,8 @@
 import requests
 import json
 
-from Backend.app.mapper_and_ruler.jira_mapper import map_jira_response_to_canonical
-from Backend.app.mapper_and_ruler.jira_transformer import transform_canonical_tickets_for_l3
+from jira_mapper import map_jira_response_to_canonical
+from jira_transformer import transform_canonical_tickets_for_l3
 
 
 def test_my_jira_endpoint():
