@@ -1,14 +1,14 @@
 import asyncio
 import json
 
-from fastapi import BackgroundTasks
+from fastapi import BackgroundTasks, Request
 
 from backend.app import main
 from backend.app.connectors import connectors_db
 
 
 def run_endpoint(request):
-    return asyncio.run(main.ingest_local_folder(request, BackgroundTasks()))
+    return asyncio.run(main.ingest_local_folder(request, BackgroundTasks(), Request({"type": "http", "app": main.app})))
 
 
 def test_manual_sharepoint_selection_uses_shared_sync_and_history(monkeypatch):

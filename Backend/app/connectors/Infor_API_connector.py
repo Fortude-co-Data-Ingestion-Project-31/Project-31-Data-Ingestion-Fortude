@@ -1,7 +1,19 @@
-from fastapi import FastAPI, Request, APIRouter
-import Backend.app.connector_config as connector_config
+from fastapi import FastAPI, Request, APIRouter, HTTPException
+import os
+import httpx
+from dotenv import load_dotenv
+import connector_config
+
+load_dotenv()
 
 router = APIRouter(prefix="/infor", tags=["INFOR M3"])
+
+
+def setting(name):
+    value = os.getenv(name) or getattr(connector_config, name, None)
+    if not value:
+        raise HTTPException(503, f"Infor configuration missing: {name}")
+    return value
 
 
 # function to get the api token
@@ -9,15 +21,15 @@ router = APIRouter(prefix="/infor", tags=["INFOR M3"])
 async def get_infor_token(client):
     payload = {
         "grant_type": "password",
-        "client_id": connector_config.INFOR_CLIENT_ID,
-        "client_secret": connector_config.INFOR_CLIENT_SECRET,
-        "username": connector_config.INFOR_USERNAME,
-        "password": connector_config.INFOR_PASSWORD,
+        "client_id": setting("INFOR_CLIENT_ID"),
+        "client_secret": setting("INFOR_CLIENT_SECRET"),
+        "username": setting("INFOR_USERNAME"),
+        "password": setting("INFOR_PASSWORD"),
     }
 
     # sends login details to Infor and waits and gets response
     response = await client.post(
-        connector_config.INFOR_TOKEN_URL,
+        setting("INFOR_TOKEN_URL"),
         data=payload,
         headers={"Content-Type": "application/x-www-form-urlencoded"}
     )
@@ -38,7 +50,7 @@ async def get_purchase_order_lines(puno: str, request: Request):
     
     }
 
-    url = f"{connector_config.INFOR_BASE_URL}/PPS200MI/LstLine"
+    url = f"{setting('INFOR_BASE_URL').rstrip('/')}/PPS200MI/LstLine"
 
     response = await client.get(
         url,
@@ -65,7 +77,7 @@ async def get_customer_order_lines(orno:str, request:Request):
     
     }
 
-    url = f"{connector_config.INFOR_BASE_URL}/OIS100MI/LstLine"
+    url = f"{setting('INFOR_BASE_URL').rstrip('/')}/OIS100MI/LstLine"
     
     response = await client.get( 
         url,
@@ -78,9 +90,19 @@ async def get_customer_order_lines(orno:str, request:Request):
     return response.json()
 
 
-
-
-
-
-
-
+# Allow the ingestion endpoint to reuse the existing order routes.
+async def fetch_order_lines(order_type: str, order_number: str, request: Request):
+    try:
+        if order_type == "purchase":
+            return await get_purchase_order_lines(order_number, request)
+        if order_type == "customer":
+            return await get_customer_order_lines(order_number, request)
+        raise HTTPException(422, "Order type must be purchase or customer.")
+    except httpx.TimeoutException as exc:
+        raise HTTPException(504, "Infor request timed out. Please retry.") from exc
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(502, f"Infor request failed (HTTP {exc.response.status_code}).") from exc
+    except httpx.RequestError as exc:
+        raise HTTPException(502, "Unable to connect to Infor.") from exc
+    except (ValueError, KeyError, AttributeError) as exc:
+        raise HTTPException(502, "Infor returned an invalid response.") from exc

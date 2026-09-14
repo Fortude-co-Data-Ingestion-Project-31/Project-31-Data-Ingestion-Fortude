@@ -53,7 +53,7 @@ export default function App() {
   const toastTimer = useRef(null);
 
   // Form state for the ingestion creation page.
-  const [form, setForm] = useState({ connector: "", mapper: "", rules: "", outputs: "" });
+  const [form, setForm] = useState({ connector: "", mapper: "", rules: "", outputs: "", order_type: "", order_number: "" });
 
   // Displays a brief success or status message near the bottom of the screen.
   const showToast = (msg) => {
@@ -241,12 +241,18 @@ export default function App() {
           rule: form.rules,
           mapper: form.mapper,
           outputs: form.outputs,
+          ...(form.connector.toLowerCase().includes("infor") ? {
+            order_type: form.order_type,
+            order_number: form.order_number.trim(),
+          } : {}),
         }),
       });
 
       if (!response.ok) {
         const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.detail || "Ingestion request failed");
+        throw new Error(Array.isArray(errData.detail)
+          ? errData.detail.map((error) => error.msg).join("; ")
+          : errData.detail || "Ingestion request failed");
       }
 
       const data = await response.json();
@@ -260,7 +266,7 @@ export default function App() {
         showToast(`Ingestion complete — ${data.processed} document(s) processed`);
       }
 
-      setForm({ connector: "", mapper: "", rules: "", outputs: "" });
+      setForm({ connector: "", mapper: "", rules: "", outputs: "", order_type: "", order_number: "" });
       goTo("dashboard");
     } catch (error) {
       if (options.onError) {
