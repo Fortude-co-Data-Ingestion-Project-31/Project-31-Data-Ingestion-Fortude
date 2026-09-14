@@ -41,18 +41,22 @@ from fastapi import BackgroundTasks
 # Import Jira utilities directly from the project root
 import sys
 sys.path.append('.')
-from connectors.Jira_API_connector import get_my_issues,get_jira_fields
-from mappers.jira_mapper import map_jira_response_to_canonical
-from mappers.jira_transformer import transform_canonical_tickets_for_l3
+from connectors.Jira_API_connector import (
+    fetch_full_bundle,
+    get_my_issues,
+)
+from mappers.jira_mapper import map_jira_bundles_to_canonical
+from mappers.jira_rule_engine import transform_canonical_tickets_full
+from mappers.jira_full_sync import jira_full_sync_poller,full_sync_jira
 import sqlite3
 
 BASE_FOLDER = Path(__file__).resolve().parents[2]
 OUTPUT_FOLDER = BASE_FOLDER / "local_data" / "output"
-INPUT_FOLDER = BASE_FOLDER / "local_data" / "input"  # ADD THIS LINE
+INPUT_FOLDER = BASE_FOLDER / "local_data" / "input"  
 
 # BASE_FOLDER = Path(__file__).resolve().parents[2]
 # OUTPUT_FOLDER = BASE_FOLDER / "local_data" / "output"
-POLL_INTERVAL_SECONDS = 300
+POLL_INTERVAL_SECONDS = 10
 SHAREPOINT_POLL_RULE = "Knowledge Base Rules"
 
 logger = logging.getLogger(__name__)
@@ -70,15 +74,22 @@ async def lifespan(app: FastAPI):
     auth.init_db()
     init_config_db()
     polling_task = asyncio.create_task(poll_sharepoint_ingestion())
+    jira_full_sync_task = asyncio.create_task(
+        jira_full_sync_poller(interval_hours=24)
+    )
+
     try:
         yield
     finally:
-        polling_task.cancel()
-        try:
-            await polling_task
-        except asyncio.CancelledError:
-            pass
+        for task in (polling_task, jira_full_sync_task):
+            if task:
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
         polling_task = None
+        jira_full_sync_task = None
 
 
 app = FastAPI(lifespan=lifespan)
@@ -198,55 +209,74 @@ async def poll_sharepoint_ingestion():
         except Exception:
             logger.exception("Automatic SharePoint ingestion failed")
 
-async def poll_jira(rule: str):
-    """Polls Jira every 5 minutes, transforms data, and saves to JSON."""
+async def poll_jira(rule: str | None = None):
+    """
+    Polls Jira every 5 minutes, transforms data, and saves to JSON.
+    Defaults to running ALL rule sets (A, B, C, D, F, G).
+    Pass a specific rule ("A", "B", "C", "D", "F", "G")
+    to run only that rule set.
+    """
     while True:
-        print(f"Polling Jira... (using rule: {rule})")
+        print(f"Polling Jira... (using rule: {rule or 'ALL'})")
         try:
-            # 1. Fetch raw data from Jira directly (no FastAPI wrapper)
             jira_data = await get_my_issues()
-            print(jira_data)
-            print(f"DEBUG: Jira API returned {jira_data.get('total')} tickets.")
-            # 2. Map to canonical schema
-            canonical_tickets = map_jira_response_to_canonical(jira_data)
-            print(f"DEBUG: Mapper successfully processed {len(canonical_tickets)} tickets.")
-            # 3. Apply rules / transformations based on user selection
-            if "L3" in (rule or ""):
-                final_tickets = transform_canonical_tickets_for_l3(canonical_tickets)
-            else:
-                final_tickets = canonical_tickets
-                
-            # 4. Save output to jira_issues.json
+            print(f"Fetched {len(jira_data.get('issues', []))} issues from Jira.")
+            issues = jira_data.get("issues", [])
+
+            bundles = []
+            for issue in issues:
+               bundles.append(await fetch_full_bundle(issue))
+
+            canonical_tickets = map_jira_bundles_to_canonical(bundles)
+            print(f"Mapped {len(canonical_tickets)} canonical tickets from Jira.")
+            final_tickets = transform_canonical_tickets_full(
+                canonical_tickets,
+                rule,
+            )
+
             OUTPUT_FOLDER.mkdir(parents=True, exist_ok=True)
             output_file = OUTPUT_FOLDER / "jira_issues.json"
-            
+
             existing_tickets = []
             if output_file.exists():
                 try:
                     existing_tickets = json.loads(output_file.read_text(encoding="utf-8"))
                 except json.JSONDecodeError:
                     pass
-            
-            # Deduplicate by ticket_key
-            ticket_dict = {t.get("ticket_key"): t for t in existing_tickets if isinstance(t, dict) and t.get("ticket_key")}
-            
+
+            ticket_dict = {
+                t.get("ticket_key"): t
+                for t in existing_tickets
+                if isinstance(t, dict) and t.get("ticket_key")
+            }
+
             for t in final_tickets:
                 key = t.get("ticket_key")
                 if key:
                     ticket_dict[key] = t
-                    
+
             merged_tickets = list(ticket_dict.values())
-            
+
             output_file.write_text(
                 json.dumps(merged_tickets, indent=2, ensure_ascii=False),
-                encoding="utf-8"
+                encoding="utf-8",
             )
-            print(f"Successfully appended/updated Jira tickets in {output_file.name}. Total tickets: {len(merged_tickets)}")
-            
+
+            print(
+                f"Updated {output_file.name}. "
+                f"Rule set: {rule or 'ALL'}. Total tickets: {len(merged_tickets)}"
+            )
+
         except Exception as e:
             print(f"Error polling Jira: {e}")
-            
-        await asyncio.sleep(300)
+
+        await asyncio.sleep(POLL_INTERVAL_SECONDS)
+
+#fully sync jira issues and run all rules on them
+@app.post("/jira/full-sync")
+async def trigger_full_sync(projects: list[str] | None = None):
+    tickets = await full_sync_jira(projects=projects)
+    return {"count": len(tickets)}
 
 @app.post("/api/ingest/local-folder")
 async def ingest_local_folder(request: IngestionRequest, background_tasks: BackgroundTasks):
