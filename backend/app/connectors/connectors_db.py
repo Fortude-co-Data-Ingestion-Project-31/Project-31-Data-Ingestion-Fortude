@@ -39,10 +39,11 @@ _SEED: dict[str, list[str]] = {
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+
 def _get_conn() -> sqlite3.Connection:
     conn = sqlite3.connect(str(DB_PATH))
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON") #enable foreign key constraints
+    conn.execute("PRAGMA foreign_keys = ON")  # enable foreign key constraints
     return conn
 
 
@@ -58,61 +59,66 @@ def _row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
 # SQLite Database Initialisation
 # ---------------------------------------------------------------------------
 
+
 def init_config_db() -> None:
     """Create config tables and insert seed data if not already present."""
     conn = _get_conn()
     cur = conn.cursor()
     try:
         for table in ("connectors", "rules", "output_targets"):
-            cur.execute(
-                f"""
+            cur.execute(f"""
                 CREATE TABLE IF NOT EXISTS {table} (
                     id         INTEGER PRIMARY KEY AUTOINCREMENT,
-                    name       TEXT    UNIQUE NOT NULL (length(trim(name)) > 0),
+                    name       TEXT    UNIQUE NOT NULL CHECK (length(trim(name)) > 0),
                     created_at TEXT    NOT NULL
                 )
-                """
-            )
+                """)
 
         # Pipelines table
-        """
-        - each pipeline references exactly one existing connector
-        - connectors cannot be deleted while in use
-        """
-        cur.execute(
-            """
+        # - each pipeline references exactly one existing connector
+        # - connectors cannot be deleted while in use
+
+        cur.execute("""
             CREATE TABLE IF NOT EXISTS pipelines (
                 id           INTEGER PRIMARY KEY AUTOINCREMENT,
                 name         TEXT UNIQUE NOT NULL CHECK (length(trim(name)) > 0),
                 connector_id INTEGER NOT NULL REFERENCES connectors(id) ON DELETE RESTRICT,
-                created_at   TEXT NOT NULL
+                created_at   TEXT NOT NULL,
+                updated_at   TEXT NOT NULL
             )
-            """
-        )
-        
+            """)
+
+        # integrate updated_at column to existing database
+        columns = {
+            row["name"]
+            for row in cur.execute("PRAGMA table_info(pipelines)").fetchall()
+        }
+
+        if "updated_at" not in columns:
+            cur.execute("ALTER TABLE pipelines ADD COLUMN updated_at TEXT")
+            cur.execute(
+                "UPDATE pipelines SET updated_at = created_at WHERE updated_at IS NULL"
+            )
+
         # Associations table for pipeline -> rules/outputs
-        """
-        - each pipeline may reference one or more rules and one or more output targets
-        - deleting a pipeline automatically removes all associations
-        - rules/outputs cannot be deleted while in use
-        """
+        # - each pipeline may reference one or more rules and one or more output targets
+        # - deleting a pipeline automatically removes all associations
+        # - rules/outputs cannot be deleted while in use
+
         for table, column, target in (
             ("pipeline_rules", "rule_id", "rules"),
             ("pipeline_outputs", "output_id", "output_targets"),
         ):
-            cur.execute(
-                f"""
+            cur.execute(f"""
                 CREATE TABLE IF NOT EXISTS {table} (
                     pipeline_id INTEGER NOT NULL REFERENCES pipelines(id) ON DELETE CASCADE,
                     {column} INTEGER NOT NULL REFERENCES {target}(id) ON DELETE RESTRICT,
                     PRIMARY KEY (pipeline_id, {column})
                 )
-                """
-            )
+                """)
 
         # Ingestion history table
-        cur.execute(
-            """
+        cur.execute("""
             CREATE TABLE IF NOT EXISTS ingestion_history (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
                 connector   TEXT    NOT NULL,
@@ -124,32 +130,27 @@ def init_config_db() -> None:
                 message     TEXT,
                 started_at  TEXT    NOT NULL
             )
-            """
-        )
+            """)
 
         # SharePoint delta state table
         # stores last known Microsoft Graph delta link (token to retrieve changes since last sync) for each SharePoint file
-        cur.execute(
-            """
+        cur.execute("""
             CREATE TABLE IF NOT EXISTS sharepoint_delta_state (
                 drive_id   TEXT PRIMARY KEY,
                 delta_link TEXT NOT NULL
             )
-            """
-        )
+            """)
 
         # SharePoint item state table
         # stores mapping for each SharePoint file to its output file
-        cur.execute(
-            """
+        cur.execute("""
             CREATE TABLE IF NOT EXISTS sharepoint_item_state (
                 drive_id        TEXT NOT NULL,
                 item_id         TEXT NOT NULL,
                 output_filename TEXT NOT NULL,
                 PRIMARY KEY (drive_id, item_id)
             )
-            """
-        )
+            """)
 
         conn.commit()
 
@@ -168,6 +169,7 @@ def init_config_db() -> None:
 # ---------------------------------------------------------------------------
 # Generic CRUD helpers (used by connectors, rules, and output targets)
 # ---------------------------------------------------------------------------
+
 
 def _list_all(table: str) -> list[dict[str, Any]]:
     """Return all items from a table in the database as a list of dicts
@@ -203,7 +205,7 @@ def _add_item(table: str, name: str) -> dict[str, Any]:
         # handle duplicate name entry
         except sqlite3.IntegrityError:
             raise ValueError(f"'{name}' already exists in {table}.")
-        
+
         row_id = cur.lastrowid
         cur.execute(f"SELECT id, name, created_at FROM {table} WHERE id = ?", (row_id,))
         return _row_to_dict(cur.fetchone())
@@ -232,6 +234,7 @@ def _delete_item(table: str, item_id: int) -> bool:
 # Public API - Connectors
 # ---------------------------------------------------------------------------
 
+
 def list_connectors() -> list[dict[str, Any]]:
     """Return all connectors in the database as a list of dicts"""
     return _list_all("connectors")
@@ -250,6 +253,7 @@ def delete_connector(item_id: int) -> bool:
 # ---------------------------------------------------------------------------
 # Public API - Rules
 # ---------------------------------------------------------------------------
+
 
 def list_rules() -> list[dict[str, Any]]:
     """Return all rules in the database as a list of dicts"""
@@ -270,6 +274,7 @@ def delete_rule(item_id: int) -> bool:
 # Public API - Output Targets
 # ---------------------------------------------------------------------------
 
+
 def list_outputs() -> list[dict[str, Any]]:
     """Return all output targets in the database as a list of dicts"""
     return _list_all("output_targets")
@@ -288,6 +293,7 @@ def delete_output(item_id: int) -> bool:
 # ---------------------------------------------------------------------------
 # Public API - Ingestion History
 # ---------------------------------------------------------------------------
+
 
 def add_history_entry(
     connector: str,
@@ -314,7 +320,7 @@ def add_history_entry(
     conn = _get_conn()
     cur = conn.cursor()
     try:
-        started_at = _now_iso() #record time entry was created
+        started_at = _now_iso()  # record time entry was created
         cur.execute(
             """
             INSERT INTO ingestion_history
@@ -364,9 +370,10 @@ def delete_history_entry(entry_id: int) -> bool:
 # reprocessing unchanged files
 # ---------------------------------------------------------------------------
 
+
 def get_sharepoint_delta_link(drive_id: str) -> str | None:
     """Identifies the last completed SharePoint synchronisation state for a given drive
-    
+
     Input:   unique identifier for the SharePoint drive (str)
     Output: (str)
         last known delta link -> if drive found
@@ -385,13 +392,15 @@ def get_sharepoint_delta_link(drive_id: str) -> str | None:
 
 def clear_sharepoint_delta_link(drive_id: str) -> None:
     """Deletes the last known SharePoint synchronisation state for a given drive
-    
+
     Input:  unique identifier for the SharePoint drive (str)
     Output: None
     """
     conn = _get_conn()
     try:
-        conn.execute("DELETE FROM sharepoint_delta_state WHERE drive_id = ?", (drive_id,))
+        conn.execute(
+            "DELETE FROM sharepoint_delta_state WHERE drive_id = ?", (drive_id,)
+        )
         conn.commit()
     finally:
         conn.close()
@@ -399,7 +408,7 @@ def clear_sharepoint_delta_link(drive_id: str) -> None:
 
 def get_sharepoint_item_mappings(drive_id: str) -> dict[str, str]:
     """Retrieves the item and output file mappings for a given drive
-    
+
     Input:  unique identifier for the SharePoint drive (str)
     Output: mapping of items and output filenames (list of dicts)
     """
@@ -451,7 +460,7 @@ def save_sharepoint_sync_state(
                 """,
                 (drive_id, item_id, output_filename),
             )
-        
+
         # save/overwrite new delta link for the drive
         conn.execute(
             """
