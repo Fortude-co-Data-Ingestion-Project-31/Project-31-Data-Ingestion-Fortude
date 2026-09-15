@@ -2,11 +2,11 @@
 Connector, Rule, and Output-Target persistence layer.
 
 Stores configuration items in the same SQLite database used by the auth
-module (users.db).  Three tables are created if they do not already exist:
+module (users.db). Three tables are created if they do not already exist:
 
-    connectors     – data source connectors
-    rules          – transformation / filtering rules
-    output_targets – destinations for ingested data
+    connectors     - data source connectors
+    rules          - transformation / filtering rules
+    output_targets - destinations for ingested data
 
 Each table has the same schema:
     id         INTEGER PRIMARY KEY AUTOINCREMENT
@@ -14,12 +14,11 @@ Each table has the same schema:
     created_at TEXT NOT NULL  (ISO-8601 timestamp)
 
 Seed data is inserted on first run so the app starts with a useful set of
-defaults.  Subsequent runs are safe — the INSERT OR IGNORE statements are
+defaults.  Subsequent runs are safe - the INSERT OR IGNORE statements are
 no-ops when the rows already exist.
 """
 
 import sqlite3
-import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -27,7 +26,7 @@ from typing import Any
 DB_PATH = Path(__file__).resolve().parent / "users.db"
 
 # ---------------------------------------------------------------------------
-# Seed data — inserted on first run only (INSERT OR IGNORE)
+# Seed data - inserted on first run only (INSERT OR IGNORE)
 # ---------------------------------------------------------------------------
 
 _SEED: dict[str, list[str]] = {
@@ -36,7 +35,6 @@ _SEED: dict[str, list[str]] = {
     "output_targets": ["PostgreSQL", "MongoDB", "Kafka", "Vector Database"],
 }
 
-
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
@@ -44,6 +42,7 @@ _SEED: dict[str, list[str]] = {
 def _get_conn() -> sqlite3.Connection:
     conn = sqlite3.connect(str(DB_PATH))
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON") #enable foreign key constraints
     return conn
 
 
@@ -56,7 +55,7 @@ def _row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# Initialisation
+# SQLite Database Initialisation
 # ---------------------------------------------------------------------------
 
 def init_config_db() -> None:
@@ -69,12 +68,49 @@ def init_config_db() -> None:
                 f"""
                 CREATE TABLE IF NOT EXISTS {table} (
                     id         INTEGER PRIMARY KEY AUTOINCREMENT,
-                    name       TEXT    UNIQUE NOT NULL,
+                    name       TEXT    UNIQUE NOT NULL (length(trim(name)) > 0),
                     created_at TEXT    NOT NULL
                 )
                 """
             )
 
+        # Pipelines table
+        """
+        - each pipeline references exactly one existing connector
+        - connectors cannot be deleted while in use
+        """
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS pipelines (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                name         TEXT UNIQUE NOT NULL CHECK (length(trim(name)) > 0),
+                connector_id INTEGER NOT NULL REFERENCES connectors(id) ON DELETE RESTRICT,
+                created_at   TEXT NOT NULL
+            )
+            """
+        )
+        
+        # Associations table for pipeline -> rules/outputs
+        """
+        - each pipeline may reference one or more rules and one or more output targets
+        - deleting a pipeline automatically removes all associations
+        - rules/outputs cannot be deleted while in use
+        """
+        for table, column, target in (
+            ("pipeline_rules", "rule_id", "rules"),
+            ("pipeline_outputs", "output_id", "output_targets"),
+        ):
+            cur.execute(
+                f"""
+                CREATE TABLE IF NOT EXISTS {table} (
+                    pipeline_id INTEGER NOT NULL REFERENCES pipelines(id) ON DELETE CASCADE,
+                    {column} INTEGER NOT NULL REFERENCES {target}(id) ON DELETE RESTRICT,
+                    PRIMARY KEY (pipeline_id, {column})
+                )
+                """
+            )
+
+        # Ingestion history table
         cur.execute(
             """
             CREATE TABLE IF NOT EXISTS ingestion_history (
@@ -91,6 +127,8 @@ def init_config_db() -> None:
             """
         )
 
+        # SharePoint delta state table
+        # stores last known Microsoft Graph delta link (token to retrieve changes since last sync) for each SharePoint file
         cur.execute(
             """
             CREATE TABLE IF NOT EXISTS sharepoint_delta_state (
@@ -99,6 +137,9 @@ def init_config_db() -> None:
             )
             """
         )
+
+        # SharePoint item state table
+        # stores mapping for each SharePoint file to its output file
         cur.execute(
             """
             CREATE TABLE IF NOT EXISTS sharepoint_item_state (
@@ -112,7 +153,7 @@ def init_config_db() -> None:
 
         conn.commit()
 
-        # Insert seeds — silently skipped if rows already exist.
+        # Insert seed data into database
         for table, names in _SEED.items():
             for name in names:
                 cur.execute(
@@ -166,8 +207,8 @@ def _delete_item(table: str, item_id: int) -> bool:
     """Delete an item by primary key.
 
     Returns:
-        True  – row was found and deleted.
-        False – no row with that id.
+        True  - row was found and deleted.
+        False - no row with that id.
     """
     conn = _get_conn()
     cur = conn.cursor()
@@ -180,7 +221,7 @@ def _delete_item(table: str, item_id: int) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Public API — Connectors
+# Public API - Connectors
 # ---------------------------------------------------------------------------
 
 def list_connectors() -> list[dict[str, Any]]:
@@ -196,7 +237,7 @@ def delete_connector(item_id: int) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Public API — Rules
+# Public API - Rules
 # ---------------------------------------------------------------------------
 
 def list_rules() -> list[dict[str, Any]]:
@@ -212,7 +253,7 @@ def delete_rule(item_id: int) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Public API — Output Targets
+# Public API - Output Targets
 # ---------------------------------------------------------------------------
 
 def list_outputs() -> list[dict[str, Any]]:
@@ -228,7 +269,7 @@ def delete_output(item_id: int) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Public API — Ingestion History
+# Public API - Ingestion History
 # ---------------------------------------------------------------------------
 
 def add_history_entry(
@@ -289,7 +330,7 @@ def delete_history_entry(entry_id: int) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Public API — SharePoint delta synchronization state
+# Public API - SharePoint delta synchronization state
 # ---------------------------------------------------------------------------
 
 def get_sharepoint_delta_link(drive_id: str) -> str | None:
