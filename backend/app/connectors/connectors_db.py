@@ -30,7 +30,7 @@ DB_PATH = Path(__file__).resolve().parent / "users.db"
 # ---------------------------------------------------------------------------
 
 _SEED: dict[str, list[str]] = {
-    "connectors": ["Infor Sales", "Jira Support", "SharePoint KB"],
+    "connectors": ["Infor", "Jira", "SharePoint"],
     "rules": ["Infor Sales Rules", "L3 Ticket Rules", "Knowledge Base Rules"],
     "output_targets": ["PostgreSQL", "MongoDB", "Kafka", "Vector Database"],
 }
