@@ -500,7 +500,6 @@ def add_pipeline(
     """Add a new pipeline to the database and return it as a dict"""
     return _save_pipeline(None, name, connector_id, rule_ids, output_ids)
 
-
 def update_pipeline(
     pipeline_id: int,
     name: str,
@@ -511,15 +510,32 @@ def update_pipeline(
     """Update an existing pipeline in the database and return it as a dict, or None if not found"""
     return _save_pipeline(pipeline_id, name, connector_id, rule_ids, output_ids)
 
-
 def delete_pipeline(pipeline_id: int) -> bool:
     """Delete a pipeline by id, return True if deleted and False if not found"""
     return _delete_item("pipelines", pipeline_id)
 
+def get_pipeline(pipeline_id: int) -> dict[str, Any] | None:
+    """Retrieve a pipeline by id, return it as a dict, or None if not found"""
+    conn = _get_conn()
+    try:
+        conn.execute("BEGIN")
+        rows = _read_pipeline(conn, pipeline_id)
+        return rows[0] if rows else None
+    finally:
+        conn.close()
+
+def list_pipelines() -> list[dict[str, Any]]:
+    """Return all pipelines in the database as a list of dicts"""
+    conn = _get_conn()
+    try:
+        conn.execute("BEGIN")
+        return _read_pipeline(conn)
+    finally:
+        conn.close()
+
 # ---------------------------------------------------------------------------
 # Public API - Ingestion History
 # ---------------------------------------------------------------------------
-
 
 def add_history_entry(
     connector: str,
