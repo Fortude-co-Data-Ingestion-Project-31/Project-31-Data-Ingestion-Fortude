@@ -17,7 +17,7 @@ from app.connectors.sharepoint_connector import (
     read_sharepoint_delta,
 )
 from app.rules.rule_handlers import apply_selected_rules
-import app.auth
+from app import auth
 from app.connectors.connectors_db import (
     init_config_db,
     list_connectors,
