@@ -21,14 +21,14 @@ def test_manual_sharepoint_selection_uses_shared_sync_and_history(monkeypatch):
     monkeypatch.setattr(main, "add_history_entry", lambda **kwargs: history.append(kwargs))
 
     result = run_endpoint(main.IngestionRequest(
-        connector="SharePoint KB", rule="Knowledge Base Rules",
+        connector="SharePoint", rule="Knowledge Base Rules",
         mapper="Document Mapper", outputs="Kafka",
     ))
 
     assert calls == ["Knowledge Base Rules"]
     assert result["processed"] == 2
     assert history == [{
-        "connector": "SharePoint KB", "mapper": "Document Mapper",
+        "connector": "SharePoint", "mapper": "Document Mapper",
         "rules": "Knowledge Base Rules", "outputs": "Kafka",
         "status": "completed", "processed": 2,
     }]
