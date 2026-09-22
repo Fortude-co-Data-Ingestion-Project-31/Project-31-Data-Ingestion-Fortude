@@ -236,6 +236,7 @@ def _delete_item(table: str, item_id: int) -> bool:
 class PipelineDuplicateNameError(ValueError):
     """Raised when pipeline with same name already exists"""
 
+
 def _read_pipeline(
     conn: sqlite3.Connection, pipeline_id: int | None = None
 ) -> list[dict[str, Any]]:
@@ -365,7 +366,7 @@ def _save_pipeline(
         None                                      -> if pipeline not found
     """
     conn = _get_conn()
-    
+
     try:
         # start a write transaction
         conn.execute("BEGIN IMMEDIATE")
@@ -389,7 +390,7 @@ def _save_pipeline(
         if duplicate and duplicate["id"] != pipeline_id:
             raise PipelineDuplicateNameError(f"Pipeline name '{name}' already exists")
 
-        now = _now_iso() #current timestamp
+        now = _now_iso()  # current timestamp
 
         # if new pipeline, insert it noting current timestamp
         if pipeline_id is None:
@@ -405,7 +406,7 @@ def _save_pipeline(
                 """UPDATE pipelines SET name = ?, connector_id = ?, updated_at = ? WHERE id = ?""",
                 (name, connector_id, now, pipeline_id),
             )
-        
+
         # replace existing associated rules and outputs
         for table, column, ids in (
             ("pipeline_rules", "rule_id", rule_ids),
@@ -419,7 +420,7 @@ def _save_pipeline(
 
         conn.commit()
         return _read_pipeline(conn, pipeline_id)[0]
-    
+
     except Exception:
         conn.rollback()
         raise
@@ -490,8 +491,30 @@ def delete_output(item_id: int) -> bool:
 
 # ---------------------------------------------------------------------------
 # Public API - Pipelines
-# add list get update delete
+# add update delete get list
 # ---------------------------------------------------------------------------
+
+def add_pipeline(
+    name: str, connector_id: int, rule_ids: list[int], output_ids: list[int]
+) -> dict[str, Any]:
+    """Add a new pipeline to the database and return it as a dict"""
+    return _save_pipeline(None, name, connector_id, rule_ids, output_ids)
+
+
+def update_pipeline(
+    pipeline_id: int,
+    name: str,
+    connector_id: int,
+    rule_ids: list[int],
+    output_ids: list[int],
+) -> dict[str, Any] | None:
+    """Update an existing pipeline in the database and return it as a dict, or None if not found"""
+    return _save_pipeline(pipeline_id, name, connector_id, rule_ids, output_ids)
+
+
+def delete_pipeline(pipeline_id: int) -> bool:
+    """Delete a pipeline by id, return True if deleted and False if not found"""
+    return _delete_item("pipelines", pipeline_id)
 
 # ---------------------------------------------------------------------------
 # Public API - Ingestion History
