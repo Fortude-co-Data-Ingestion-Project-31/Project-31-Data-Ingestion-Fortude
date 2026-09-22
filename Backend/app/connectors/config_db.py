@@ -231,6 +231,204 @@ def _delete_item(table: str, item_id: int) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# CRUD helpers (used by pipelines)
+# ---------------------------------------------------------------------------
+class PipelineDuplicateNameError(ValueError):
+    """Raised when pipeline with same name already exists"""
+
+def _read_pipeline(
+    conn: sqlite3.Connection, pipeline_id: int | None = None
+) -> list[dict[str, Any]]:
+    """Reads pipelines from the database
+
+    Inputs:
+        conn:        existing database connection (sqlite3.Connection)
+        pipeline_id: optional id of a specific pipeline to read (int)
+
+    Output: pipeline information (list of dicts)
+    """
+    where = "WHERE p.id = ?" if pipeline_id is not None else ""
+    params = (pipeline_id,) if pipeline_id is not None else ()
+
+    # retrieve pipeline info
+    rows = conn.execute(
+        f"""
+        SELECT p.*, c.name AS connector_name
+        FROM pipelines p JOIN connectors c ON C.id = p.connector_id
+        {where} ORDER BY p.id""",
+        params,
+    ).fetchall()
+    pipelines = {}
+
+    # create dictionary for each pipeline
+    for row in rows:
+        pipelines[row["id"]] = {
+            "id": row["id"],
+            "name": row["name"],
+            "connector": {
+                "id": row["connector_id"],
+                "name": row["connector_name"],
+            },
+            "rules": [],
+            "outputs": [],
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+        }
+
+    # if no pipelines found, return empty list
+    if not pipelines:
+        return []
+
+    # retrieve associated rules and outputs for each pipeline
+    for key, table, column, target in (
+        ("rules", "pipeline_rules", "rule_id", "rules"),
+        ("outputs", "pipeline_outputs", "output_id", "output_targets"),
+    ):
+        for row in conn.execute(
+            f"""
+            SELECT p.id AS pipeline_id, item.id, item.name
+            FROM pipelines p JOIN {table} link ON link.pipeline_id = p.id
+            JOIN {target} item ON item.id = link.{column}
+            {where} ORDER BY p.id, item.id
+            """,
+            params,
+        ):
+            pipelines[row["pipeline_id"]][key].append(
+                {"id": row["id"], "name": row["name"]}
+            )
+    return list(pipelines.values())
+
+
+def _validate_pipeline(
+    conn: sqlite3.Connection,
+    name: str,
+    connector_id: int,
+    rule_ids: list[int],
+    output_ids: list[int],
+) -> str:
+    """Validate a pipeline's name, connector, rules, and outputs before saving
+
+    Inputs:
+        conn:         existing database connection (sqlite3.Connection)
+        name:         pipeline name (str)
+        connector_id: id of the connector (int)
+        rule_ids:     list of rule ids (list of ints)
+        output_ids:   list of output target ids (list of ints)
+
+    Output: (str)
+        error message -> if validation fails
+        ""            -> if validation passes
+    """
+    # check that name is a non-empty string
+    if not isinstance(name, str) or not name.strip():
+        raise ValueError("Pipeline name must not be empty")
+
+    for label, ids, table in (
+        ("Connector", [connector_id], "connectors"),
+        ("Rule", rule_ids, "rules"),
+        ("Output", output_ids, "output_targets"),
+    ):
+        if not isinstance(ids, list) or not ids:
+            raise ValueError(f"Pipeline must have at least one {label.lower()}")
+
+        if any(type(item_id) is not int or item_id <= 0 for item_id in ids):
+            raise ValueError(f"{label} IDs must be positive integers")
+
+        if len(ids) != len(set(ids)):
+            raise ValueError(f"{label} IDs must be unique")
+
+        existing = {row[0] for row in conn.execute(f"SELECT id FROM {table}")}
+        missing = sorted(set(ids) - existing)
+
+        if missing:
+            raise ValueError(f"{label} IDs not found in {table}: {missing}")
+        return name.strip()
+
+
+def _save_pipeline(
+    pipeline_id: int | None,
+    name: str,
+    connector_id: int,
+    rule_ids: list[int],
+    output_ids: list[int],
+) -> dict[str, Any] | None:
+    """Save/update pipeline to the database, including its associated rules and outputs
+    Inputs:
+        pipeline_id:  id of the pipeline to update (int) or None for new
+        name:         pipeline name (str)
+        connector_id: id of the connector (int)
+        rule_ids:     list of rule ids (list of ints)
+        output_ids:   list of output target ids (list of ints)
+
+    Output:
+        saved/updated pipeline information (dict) -> if successful
+        None                                      -> if pipeline not found
+    """
+    conn = _get_conn()
+    
+    try:
+        # start a write transaction
+        conn.execute("BEGIN IMMEDIATE")
+
+        # check whether existing pipeline exists
+        if (
+            pipeline_id is not None
+            and not conn.execute(
+                "SELECT id FROM pipelines WHERE id = ?", (pipeline_id,)
+            ).fetchone()
+        ):
+            return None
+
+        # validate pipeline components
+        name = _validate_pipeline(conn, name, connector_id, rule_ids, output_ids)
+        duplicate = conn.execute(
+            "SELECT id FROM pipelines WHERE name = ?", (name,)
+        ).fetchone()
+
+        # check for duplicate pipeline name
+        if duplicate and duplicate["id"] != pipeline_id:
+            raise PipelineDuplicateNameError(f"Pipeline name '{name}' already exists")
+
+        now = _now_iso() #current timestamp
+
+        # if new pipeline, insert it noting current timestamp
+        if pipeline_id is None:
+            pipeline_id = conn.execute(
+                """INSERT INTO pipelines (name, connector_id, created_at, updated_at)
+                VALUES (?, ?, ?, ?)""",
+                (name, connector_id, now, now),
+            ).lastrowid
+
+        # if pipeline already exists, update it noting current timestamp
+        else:
+            conn.execute(
+                """UPDATE pipelines SET name = ?, connector_id = ?, updated_at = ? WHERE id = ?""",
+                (name, connector_id, now, pipeline_id),
+            )
+        
+        # replace existing associated rules and outputs
+        for table, column, ids in (
+            ("pipeline_rules", "rule_id", rule_ids),
+            ("pipeline_outputs", "output_id", output_ids),
+        ):
+            conn.execute(f"DELETE FROM {table} WHERE pipeline_id = ?", (pipeline_id,))
+            conn.executemany(
+                f"INSERT INTO {table} (pipeline_id, {column}) VALUES (?, ?)",
+                [(pipeline_id, item_id) for item_id in ids],
+            )
+
+        conn.commit()
+        return _read_pipeline(conn, pipeline_id)[0]
+    
+    except Exception:
+        conn.rollback()
+        raise
+
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
 # Public API - Connectors
 # ---------------------------------------------------------------------------
 
@@ -289,6 +487,11 @@ def delete_output(item_id: int) -> bool:
     """Delete an output target by id, return True if deleted and False if not found"""
     return _delete_item("output_targets", item_id)
 
+
+# ---------------------------------------------------------------------------
+# Public API - Pipelines
+# add list get update delete
+# ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
 # Public API - Ingestion History
