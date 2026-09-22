@@ -2,15 +2,15 @@ import sqlite3
 
 import pytest
 
-from backend.app.connectors import connectors_db
+from backend.app.connectors import config_db
 
 
 # setup temp SQLite db for each test
 @pytest.fixture
 def database(monkeypatch, tmp_path):
-    monkeypatch.setattr(connectors_db, "DB_PATH", tmp_path / "config.db")
-    connectors_db.init_config_db()
-    return connectors_db.DB_PATH
+    monkeypatch.setattr(config_db, "DB_PATH", tmp_path / "config.db")
+    config_db.init_config_db()
+    return config_db.DB_PATH
 
 
 # pipeline schema tests

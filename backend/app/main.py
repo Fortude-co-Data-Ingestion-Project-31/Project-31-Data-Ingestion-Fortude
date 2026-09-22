@@ -18,7 +18,7 @@ from connectors.sharepoint_connector import (
 )
 from rules.rule_handlers import apply_selected_rules
 import auth
-from connectors.connectors_db import (
+from connectors.config_db import (
     init_config_db,
     list_connectors,
     add_connector,
