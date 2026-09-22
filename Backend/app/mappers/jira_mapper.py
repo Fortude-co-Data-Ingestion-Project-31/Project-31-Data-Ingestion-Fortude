@@ -12,7 +12,7 @@ Canonical ticket sections
 - Top-level scalars: ticket identity, status, priority, timestamps.
 - Nested arrays:    status_history, comments, worklogs, approvals, attachments.
 - Injected data:    contract, rate_table, client_baseline, closed_periods.
-- Derived data:     rule output, written later by the rule engine.
+- rule_results data:     rule output, written later by the rule engine.
 """
 
 from datetime import datetime
@@ -175,7 +175,7 @@ def map_jira_issue_to_canonical(issue):
 
         # Rule engine output. Every rule writes its result under this key
         # so that raw Jira fields are never overwritten.
-        "derived": {},
+        "rule_results": {},
     }
 
     return canonical_ticket
@@ -236,6 +236,10 @@ def enrich_status_history(ticket):
     A "reopen" is a transition from a terminal status (Resolved, Closed,
     Done) back to a non-terminal one.
 
+    This function enriches the status_history entries themselves. The
+    reopen *count* is produced by rule D-03, not here, so that all
+    rule_results come from the rule engine.
+
     Mutates the ticket in place and returns it.
     """
     history = ticket.get("status_history", [])
@@ -244,10 +248,7 @@ def enrich_status_history(ticket):
     terminal_statuses = {"Resolved", "Closed", "Done"}
 
     if not history:
-        ticket["derived"]["reopen_count"] = 0
         return ticket
-
-    reopen_count = 0
 
     for index, entry in enumerate(history):
         # Time spent in the previous status.
@@ -268,10 +269,7 @@ def enrich_status_history(ticket):
             is_reopen = False
 
         entry["is_reopen"] = is_reopen
-        if is_reopen:
-            reopen_count += 1
 
-    ticket["derived"]["reopen_count"] = reopen_count
     return ticket
 
 

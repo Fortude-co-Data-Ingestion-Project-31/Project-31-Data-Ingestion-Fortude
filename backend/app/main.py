@@ -9,16 +9,16 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from connectors.local_folder_connector import read_local_text_files
-from mappers.local_file_mapper import map_local_files_to_canonical
-from connectors.sharepoint_connector import (
+from app.connectors.local_folder_connector import read_local_text_files
+from app.mappers.local_file_mapper import map_local_files_to_canonical
+from app.connectors.sharepoint_connector import (
     SharePointDeltaStateError,
     get_sharepoint_drive_id,
     read_sharepoint_delta,
 )
-from rules.rule_handlers import apply_selected_rules
-import auth
-from connectors.connectors_db import (
+from app.rules.rule_handlers import apply_selected_rules
+import app.auth
+from app.connectors.connectors_db import (
     init_config_db,
     list_connectors,
     add_connector,
@@ -41,13 +41,13 @@ from fastapi import BackgroundTasks
 # Import Jira utilities directly from the project root
 import sys
 sys.path.append('.')
-from connectors.Jira_API_connector import (
+from app.connectors.Jira_API_connector import (
     fetch_full_bundle,
     get_my_issues,
 )
-from mappers.jira_mapper import map_jira_bundles_to_canonical
-from mappers.jira_rule_engine import transform_canonical_tickets_full
-from mappers.jira_full_sync import jira_full_sync_poller,full_sync_jira
+from app.mappers.jira_mapper import map_jira_bundles_to_canonical
+from app.mappers.jira_rule_engine import transform_canonical_tickets_full
+from app.mappers.jira_full_sync import jira_full_sync_poller,full_sync_jira
 import sqlite3
 
 BASE_FOLDER = Path(__file__).resolve().parents[2]

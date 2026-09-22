@@ -1,9 +1,9 @@
-from rules.jira_rules import rule_a
-from rules.jira_rules import rule_b
-from rules.jira_rules import rule_c
-from rules.jira_rules import rule_d
-from rules.jira_rules import rule_f
-from rules.jira_rules import rule_g
+from app.rules.jira_rules import rule_a
+from app.rules.jira_rules import rule_b
+from app.rules.jira_rules import rule_c
+from app.rules.jira_rules import rule_d
+from app.rules.jira_rules import rule_f
+from app.rules.jira_rules import rule_g
 
 DEFAULT_RULE_SET = "ALL"
 #list to call all rules

@@ -35,3 +35,4 @@ Thumbs.db
 .build
 node_modules/
 local_data/
+.pytest_cache/

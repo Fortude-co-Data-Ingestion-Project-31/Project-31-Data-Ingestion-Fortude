@@ -1,7 +1,7 @@
 import asyncio
 import sys
 sys.path.append('.')
-from Jira_API_connector import get_my_issues
+from app.connectors.Jira_API_connector import get_my_issues
 
 async def main():
     try:

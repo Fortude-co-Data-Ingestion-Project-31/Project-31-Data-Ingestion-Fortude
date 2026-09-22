@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException, Query
 from contextlib import asynccontextmanager
 import httpx
 import base64
-from connector_config import JIRA_BASE_URL,JIRA_EMAIL,JIRA_API_TOKEN
+from app.connector_config import JIRA_BASE_URL,JIRA_EMAIL,JIRA_API_TOKEN
 from pydantic import BaseModel
 
 class JiraSearch(BaseModel):

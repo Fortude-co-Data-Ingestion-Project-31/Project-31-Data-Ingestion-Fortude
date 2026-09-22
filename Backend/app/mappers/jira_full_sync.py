@@ -22,9 +22,9 @@ from pathlib import Path
 
 from fastapi import HTTPException
 
-from connectors.Jira_API_connector import search_all_issues, fetch_full_bundle
-from mappers.jira_mapper import map_jira_bundles_to_canonical
-from mappers.jira_rule_engine import transform_canonical_tickets_full
+from app.connectors.Jira_API_connector import search_all_issues, fetch_full_bundle
+from app.mappers.jira_mapper import map_jira_bundles_to_canonical
+from app.mappers.jira_rule_engine import transform_canonical_tickets_full
 
 
 # ---------------------------------------------------------------------------
