@@ -2,13 +2,13 @@ from datetime import datetime, timezone
 
 CRITICAL_KEYWORDS = ["outage", "data loss", "production down", "breach"]
 
-##because tickets with enterprise in them only have 4 SLA, if not 24 hrs SLA
+#because tickets with enterprise in them only have 4 SLA, if not 24 hrs SLA
 def get_sla_hours(customer_tier):
     if str(customer_tier).lower() == "enterprise":
         return 4
     return 24
 
-##checks critical words
+#checks critical words
 def has_critical_keyword(ticket):
     title = ticket.get("title") or ""
     description = ticket.get("description") or ""

@@ -6,9 +6,10 @@ from rules.jira_rules import rule_f
 from rules.jira_rules import rule_g
 
 DEFAULT_RULE_SET = "ALL"
-
+#list to call all rules
 ALL_RULE_ORDER = ["A", "B", "C", "D", "F", "G"]
 
+#dict to name all rulesets, ensure the name above is the same as the key below
 RULE_SETS = {
     "A": rule_a.RULES,
     "B": rule_b.RULES,

@@ -155,7 +155,7 @@ async def get_issue_worklogs(issue_key: str):
     return values
 
 # ---------------------------------------------------------------------------
-# optional approvals endpoint (JSM only)
+# approvals endpoint (JSM only)
 # ---------------------------------------------------------------------------
 
 async def get_issue_approvals(issue_key: str):
@@ -248,7 +248,7 @@ async def search_all_issues():
 
 
 # ---------------------------------------------------------------------------
-# one call to fetch everything for one issue
+# fetch everything for one issue
 # ---------------------------------------------------------------------------
 
 async def fetch_full_bundle(issue):
