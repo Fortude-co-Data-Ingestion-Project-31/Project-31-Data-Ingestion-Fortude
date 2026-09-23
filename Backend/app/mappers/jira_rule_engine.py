@@ -19,6 +19,7 @@ Design principles
 """
 
 from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo
 
 from app.rules.jira_rules import RULE_SETS, DEFAULT_RULE_SET, ALL_RULE_ORDER
 
@@ -33,8 +34,8 @@ class RuleEngineError(Exception):
 # ---------------------------------------------------------------------------
 
 def _now_iso():
-    """Return the current UTC time as an ISO 8601 string."""
-    return datetime.now(timezone.utc).isoformat()
+    """Return the current zone time as an ISO 8601 string."""
+    return datetime.now(ZoneInfo("Australia/Melbourne")).isoformat()
 
 
 def _parse_ts(value):
@@ -213,7 +214,7 @@ def aggregate_recurrence(tickets):
         rule_results.d04_recurrence_pattern      (bool)
         rule_results.d04_recurrence_count_90d    (int)
     """
-    cutoff = datetime.now(timezone.utc) - timedelta(days=90)
+    cutoff = datetime.now(ZoneInfo("Australia/Melbourne")) - timedelta(days=90)
 
     grouped = _group_by(
         tickets,

@@ -3,10 +3,9 @@
 """
 Generic Mongo write path for every registered source.
 
-Reads SOURCES from the source registry and applies a uniform upsert +
+Reads SOURCES from the source registration table and applies a uniform upsert +
 event-append pattern regardless of which connector produced the data.
 
-Write semantics
 ---------------
 upsert_documents
     - One document per identity value.
@@ -36,20 +35,19 @@ from typing import Iterable
 
 from pymongo import UpdateOne
 
-from mongo_db_output import get_db
-from source_registration_table import SOURCES, SourceSpec, _identity
+from app.outputs.MongoDB.mongo_db_output import get_db
+from app.outputs.MongoDB.source_registration_table import SOURCES, SourceSpec, _identity
 
 
 # Sub-document blocks that must be merged per key rather than replaced.
 # rule_results is the rule engine output block; metadata is reserved for
 # future source enrichment.
-_MERGED_SUBDOCUMENTS = ("derived", "rule_results", "metadata")
+_MERGED_SUBDOCUMENTS = ("rule_results", "metadata")
 
-
+from zoneinfo import ZoneInfo
 def _now():
-    """Return the current UTC time."""
-    return datetime.now(timezone.utc)
-
+    """Return the current zone time."""
+    return datetime.now(ZoneInfo("Australia/Melbourne"))
 
 # ---------------------------------------------------------------------------
 # Merge helpers

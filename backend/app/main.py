@@ -9,6 +9,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from app.outputs.MongoDB.mongo_db_common_func import persist
+from app.outputs.MongoDB.source_registration_table import SOURCES
 from app.connectors.local_folder_connector import read_local_text_files
 from app.mappers.local_file_mapper import map_local_files_to_canonical
 from app.connectors.sharepoint_connector import (
@@ -43,7 +45,7 @@ import sys
 sys.path.append('.')
 from app.connectors.Jira_API_connector import (
     fetch_full_bundle,
-    get_my_issues,
+    get_recently_created_issues,
 )
 from app.mappers.jira_mapper import map_jira_bundles_to_canonical
 from app.mappers.jira_rule_engine import transform_canonical_tickets_full
@@ -57,6 +59,8 @@ INPUT_FOLDER = BASE_FOLDER / "local_data" / "input"
 # BASE_FOLDER = Path(__file__).resolve().parents[2]
 # OUTPUT_FOLDER = BASE_FOLDER / "local_data" / "output"
 POLL_INTERVAL_SECONDS = 10
+JIRA_FULL_SYNC_INTERVAL_HOURS = 24
+JIRA_FULL_SYNC_DELAY_SECONDS = 0# JIRA_FULL_SYNC_INTERVAL_HOURS in seconds
 SHAREPOINT_POLL_RULE = "Knowledge Base Rules"
 
 logger = logging.getLogger(__name__)
@@ -75,7 +79,7 @@ async def lifespan(app: FastAPI):
     init_config_db()
     polling_task = asyncio.create_task(poll_sharepoint_ingestion())
     jira_full_sync_task = asyncio.create_task(
-        jira_full_sync_poller(interval_hours=24)
+        jira_full_sync_poller(interval_hours=JIRA_FULL_SYNC_INTERVAL_HOURS,initial_delay_seconds=JIRA_FULL_SYNC_DELAY_SECONDS)
     )
 
     try:
@@ -219,7 +223,7 @@ async def poll_jira(rule: str | None = None):
     while True:
         print(f"Polling Jira... (using rule: {rule or 'ALL'})")
         try:
-            jira_data = await get_my_issues()
+            jira_data = await get_recently_created_issues()
             print(f"Fetched {len(jira_data.get('issues', []))} issues from Jira.")
             issues = jira_data.get("issues", [])
 
@@ -591,3 +595,41 @@ def change_user(payload: dict):
         raise HTTPException(status_code=400, detail="username already exists")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+
+class IngestRequest(BaseModel):
+    """A batch of documents for one registered source."""
+    source: str
+    documents: list[dict]
+
+
+class IngestResponse(BaseModel):
+    source: str
+    inserted: int
+    modified: int
+    matched: int
+    skipped: int
+    events_appended: int
+
+"""
+
+"""
+@app.post("/api/mongodb/ingest")
+async def ingest_documents(request: IngestRequest):
+    """
+    Persist a batch of canonical documents for a registered source.
+
+    The frontend must send documents in the same shape the source
+    registry expects. Use `source: "jira"` for Jira tickets, and any
+    other key present in SOURCES for other sources.
+    """
+    if request.source not in SOURCES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown source '{request.source}'. "
+                   f"Valid sources: {list(SOURCES.keys())}",
+        )
+
+    summary = await persist(request.source, request.documents)
+    return IngestResponse(**summary)

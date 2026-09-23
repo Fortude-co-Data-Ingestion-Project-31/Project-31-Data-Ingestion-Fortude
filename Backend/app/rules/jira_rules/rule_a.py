@@ -22,6 +22,7 @@ ticket["function_area"] and ticket["rule_results"]["a04_severity"].
 """
 
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 
 # Severity ladder used by A-04, A-05, and A-06 to compare levels.
@@ -366,7 +367,7 @@ def rule_a_07_run_sla_clock(ticket):
     sla_hours = 4 if tier == "enterprise" else 24
 
     created = _parse_ts(ticket.get("created_at"))
-    now = datetime.now(timezone.utc)
+    now = datetime.now(ZoneInfo("Australia/Melbourne"))
 
     hours_since_created = 0.0
     if created:
