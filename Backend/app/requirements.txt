@@ -6,3 +6,6 @@ pytest
 requests
 python-docx
 pypdf
+motor
+pymongo
+pytest_asyncio
