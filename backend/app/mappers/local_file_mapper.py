@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from pathlib import Path
 
-from mappers.document_chunker import create_document_chunks
+from .document_chunker import create_document_chunks
 
 
 def map_local_file_to_canonical(raw_file):
