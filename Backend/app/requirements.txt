@@ -6,3 +6,5 @@ pytest
 requests
 python-docx
 pypdf
+python-pptx
+openpyxl
