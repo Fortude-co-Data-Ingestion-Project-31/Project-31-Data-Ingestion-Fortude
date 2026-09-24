@@ -10,15 +10,21 @@ router = APIRouter(prefix="/infor", tags=["INFOR M3"])
 
 
 def setting(name):
+    """Read an Infor setting from the environment, then try connector_config.
+
+    Return an error if the setting is missing, because Infor needs it to work.
+    """
     value = os.getenv(name) or getattr(connector_config, name, None)
     if not value:
         raise HTTPException(503, f"Infor configuration missing: {name}")
     return value
 
 
-# function to get the api token
-
 async def get_infor_token(client):
+    """Send the login details to Infor and return an access token.
+
+    The other functions use this token to make authorised requests to Infor.
+    """
     payload = {
         "grant_type": "password",
         "client_id": setting("INFOR_CLIENT_ID"),
@@ -27,20 +33,26 @@ async def get_infor_token(client):
         "password": setting("INFOR_PASSWORD"),
     }
 
-    # sends login details to Infor and waits and gets response
+    # Send the login details and wait for Infor's response.
     response = await client.post(
         setting("INFOR_TOKEN_URL"),
         data=payload,
         headers={"Content-Type": "application/x-www-form-urlencoded"}
     )
 
-    # checks if the http request has errors
+    # Stop here if Infor returns an HTTP error.
     response.raise_for_status()
-    return response.json()["access_token"] # Infor returns Json
+    # Read the token from the JSON response.
+    return response.json()["access_token"]
 
 
 @router.get("/purchase-orders/{puno}/lines")
 async def get_purchase_order_lines(puno: str, request: Request):
+    """Get the line items for a purchase order and return Infor's JSON response.
+
+    puno is the purchase order number. Use the app's shared HTTP client and
+    an access token to request its lines from Infor.
+    """
     client = request.app.state.client
     token = await get_infor_token(client)
 
@@ -63,11 +75,13 @@ async def get_purchase_order_lines(puno: str, request: Request):
     return response.json()
 
 
-# now second infor endpoints customer order lines
-# each endpoint should have one responsibility
-
 @router.get("/customer-orders/{orno}/lines") 
 async def get_customer_order_lines(orno:str, request:Request):
+    """Get the line items for a customer order and return Infor's JSON response.
+
+    orno is the customer order number. Use the app's shared HTTP client and
+    an access token to request its lines from Infor.
+    """
     client = request.app.state.client
     token = await get_infor_token(client)
 
@@ -90,8 +104,12 @@ async def get_customer_order_lines(orno:str, request:Request):
     return response.json()
 
 
-# Allow the ingestion endpoint to reuse the existing order routes.
 async def fetch_order_lines(order_type: str, order_number: str, request: Request):
+    """Choose the purchase or customer order function for the ingestion process.
+
+    Return the order lines, or turn connection problems and invalid responses
+    into clear API errors. Reject order types other than purchase or customer.
+    """
     try:
         if order_type == "purchase":
             return await get_purchase_order_lines(order_number, request)
