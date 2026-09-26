@@ -7,7 +7,7 @@ from pathlib import Path
 import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, StrictInt
 
 from app.outputs.MongoDB.mongo_db_common_func import persist
 from app.outputs.MongoDB.source_registration_table import SOURCES
@@ -31,6 +31,12 @@ from app.connectors.config_db import (
     list_outputs,
     add_output,
     delete_output,
+    add_pipeline,
+    list_pipelines,
+    get_pipeline,
+    update_pipeline,
+    delete_pipeline,
+    PipelineDuplicateNameError,
     add_history_entry,
     list_history,
     delete_history_entry,
@@ -40,27 +46,29 @@ from app.connectors.config_db import (
     save_sharepoint_sync_state,
 )
 from fastapi import BackgroundTasks
+
 # Import Jira utilities directly from the project root
 import sys
-sys.path.append('.')
+
+sys.path.append(".")
 from app.connectors.Jira_API_connector import (
     fetch_full_bundle,
     get_recently_created_issues,
 )
 from app.mappers.jira_mapper import map_jira_bundles_to_canonical
 from app.mappers.jira_rule_engine import transform_canonical_tickets_full
-from app.mappers.jira_full_sync import jira_full_sync_poller,full_sync_jira
+from app.mappers.jira_full_sync import jira_full_sync_poller, full_sync_jira
 import sqlite3
 
 BASE_FOLDER = Path(__file__).resolve().parents[2]
 OUTPUT_FOLDER = BASE_FOLDER / "local_data" / "output"
-INPUT_FOLDER = BASE_FOLDER / "local_data" / "input"  
+INPUT_FOLDER = BASE_FOLDER / "local_data" / "input"
 
 # BASE_FOLDER = Path(__file__).resolve().parents[2]
 # OUTPUT_FOLDER = BASE_FOLDER / "local_data" / "output"
 POLL_INTERVAL_SECONDS = 10
 JIRA_FULL_SYNC_INTERVAL_HOURS = 24
-JIRA_FULL_SYNC_DELAY_SECONDS = 0# JIRA_FULL_SYNC_INTERVAL_HOURS in seconds
+JIRA_FULL_SYNC_DELAY_SECONDS = 0  # JIRA_FULL_SYNC_INTERVAL_HOURS in seconds
 SHAREPOINT_POLL_RULE = "Knowledge Base Rules"
 
 logger = logging.getLogger(__name__)
@@ -72,6 +80,7 @@ polling_task = None
 # Lifespan — initialise databases once on startup
 # ---------------------------------------------------------------------------
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global polling_task
@@ -79,7 +88,10 @@ async def lifespan(app: FastAPI):
     init_config_db()
     polling_task = asyncio.create_task(poll_sharepoint_ingestion())
     jira_full_sync_task = asyncio.create_task(
-        jira_full_sync_poller(interval_hours=JIRA_FULL_SYNC_INTERVAL_HOURS,initial_delay_seconds=JIRA_FULL_SYNC_DELAY_SECONDS)
+        jira_full_sync_poller(
+            interval_hours=JIRA_FULL_SYNC_INTERVAL_HOURS,
+            initial_delay_seconds=JIRA_FULL_SYNC_DELAY_SECONDS,
+        )
     )
 
     try:
@@ -114,6 +126,7 @@ app.add_middleware(
 # Pydantic models
 # ---------------------------------------------------------------------------
 
+
 class IngestionRequest(BaseModel):
     connector: str
     rule: str | None = None
@@ -125,9 +138,19 @@ class ConfigItemCreate(BaseModel):
     name: str
 
 
+class PipelineSave(BaseModel):
+    """Complete definition used for both creating and editing a pipeline."""
+
+    name: str
+    connector_id: StrictInt
+    rule_ids: list[StrictInt]
+    output_ids: list[StrictInt]
+
+
 # ---------------------------------------------------------------------------
 # Existing endpoints
 # ---------------------------------------------------------------------------
+
 
 @app.get("/")
 def read_root():
@@ -213,6 +236,7 @@ async def poll_sharepoint_ingestion():
         except Exception:
             logger.exception("Automatic SharePoint ingestion failed")
 
+
 async def poll_jira(rule: str | None = None):
     """
     Polls Jira every 5 minutes, transforms data, and saves to JSON.
@@ -229,7 +253,7 @@ async def poll_jira(rule: str | None = None):
 
             bundles = []
             for issue in issues:
-               bundles.append(await fetch_full_bundle(issue))
+                bundles.append(await fetch_full_bundle(issue))
 
             canonical_tickets = map_jira_bundles_to_canonical(bundles)
             print(f"Mapped {len(canonical_tickets)} canonical tickets from Jira.")
@@ -244,7 +268,9 @@ async def poll_jira(rule: str | None = None):
             existing_tickets = []
             if output_file.exists():
                 try:
-                    existing_tickets = json.loads(output_file.read_text(encoding="utf-8"))
+                    existing_tickets = json.loads(
+                        output_file.read_text(encoding="utf-8")
+                    )
                 except json.JSONDecodeError:
                     pass
 
@@ -276,20 +302,23 @@ async def poll_jira(rule: str | None = None):
 
         await asyncio.sleep(POLL_INTERVAL_SECONDS)
 
-#fully sync jira issues and run all rules on them
+
+# fully sync jira issues and run all rules on them
 @app.post("/jira/full-sync")
 async def trigger_full_sync(projects: list[str] | None = None):
     tickets = await full_sync_jira(projects=projects)
     return {"count": len(tickets)}
 
+
 @app.post("/api/ingest/local-folder")
-async def ingest_local_folder(request: IngestionRequest, background_tasks: BackgroundTasks):
+async def ingest_local_folder(
+    request: IngestionRequest, background_tasks: BackgroundTasks
+):
     connector_name = request.connector.lower()
 
     if "infor" in connector_name:
         raise HTTPException(
-            status_code=501,
-            detail="Connector 'Infor Sales' is not completed yet."
+            status_code=501, detail="Connector 'Infor Sales' is not completed yet."
         )
 
     if "jira" in connector_name:
@@ -362,6 +391,7 @@ async def ingest_local_folder(request: IngestionRequest, background_tasks: Backg
 # Config — Connectors
 # ---------------------------------------------------------------------------
 
+
 @app.get("/api/config/connectors")
 def get_connectors():
     """Return all stored connectors."""
@@ -383,13 +413,20 @@ def create_connector(body: ConfigItemCreate):
 @app.delete("/api/config/connectors/{item_id}", status_code=204)
 def remove_connector(item_id: int):
     """Delete a connector by ID. Returns 404 if not found."""
-    if not delete_connector(item_id):
+    try:
+        deleted = delete_connector(item_id)
+    except sqlite3.IntegrityError as exc:
+        raise HTTPException(
+            status_code=409, detail="Connector is used by a saved pipeline."
+        ) from exc
+    if not deleted:
         raise HTTPException(status_code=404, detail="Connector not found.")
 
 
 # ---------------------------------------------------------------------------
 # Config — Rules
 # ---------------------------------------------------------------------------
+
 
 @app.get("/api/config/rules")
 def get_rules():
@@ -412,13 +449,20 @@ def create_rule(body: ConfigItemCreate):
 @app.delete("/api/config/rules/{item_id}", status_code=204)
 def remove_rule(item_id: int):
     """Delete a rule by ID. Returns 404 if not found."""
-    if not delete_rule(item_id):
+    try:
+        deleted = delete_rule(item_id)
+    except sqlite3.IntegrityError as exc:
+        raise HTTPException(
+            status_code=409, detail="Rule is used by a saved pipeline."
+        ) from exc
+    if not deleted:
         raise HTTPException(status_code=404, detail="Rule not found.")
 
 
 # ---------------------------------------------------------------------------
 # Config — Output Targets
 # ---------------------------------------------------------------------------
+
 
 @app.get("/api/config/outputs")
 def get_outputs():
@@ -431,7 +475,9 @@ def create_output(body: ConfigItemCreate):
     """Add a new output target. Returns the created item."""
     name = body.name.strip()
     if not name:
-        raise HTTPException(status_code=422, detail="Output target name must not be empty.")
+        raise HTTPException(
+            status_code=422, detail="Output target name must not be empty."
+        )
     try:
         return add_output(name)
     except ValueError as exc:
@@ -441,13 +487,20 @@ def create_output(body: ConfigItemCreate):
 @app.delete("/api/config/outputs/{item_id}", status_code=204)
 def remove_output(item_id: int):
     """Delete an output target by ID. Returns 404 if not found."""
-    if not delete_output(item_id):
+    try:
+        deleted = delete_output(item_id)
+    except sqlite3.IntegrityError as exc:
+        raise HTTPException(
+            status_code=409, detail="Output target is used by a saved pipeline."
+        ) from exc
+    if not deleted:
         raise HTTPException(status_code=404, detail="Output target not found.")
 
 
 # ---------------------------------------------------------------------------
 # Ingestion History
 # ---------------------------------------------------------------------------
+
 
 @app.get("/api/history")
 def get_history():
@@ -482,6 +535,7 @@ def register(payload: dict):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.post("/api/auth/login")
 def login(payload: dict):
     username = payload.get("username")
@@ -494,11 +548,14 @@ def login(payload: dict):
             if auth.is_mfa_enabled(username):
                 tmp = auth.create_token_with_type(username, ttl=300, token_type="mfa")
                 return {"mfa_required": True, "tmp_token": tmp}
-            token = auth.create_token_with_type(username, ttl=3600, token_type="session")
+            token = auth.create_token_with_type(
+                username, ttl=3600, token_type="session"
+            )
             return {"authenticated": True, "username": username, "token": token}
         token = auth.create_token_with_type(username, ttl=3600, token_type="session")
         return {"authenticated": True, "username": username, "token": token}
     raise HTTPException(status_code=401, detail="invalid credentials")
+
 
 @app.post("/api/auth/verify")
 def verify_token(payload: dict):
@@ -509,6 +566,7 @@ def verify_token(payload: dict):
     if not username:
         raise HTTPException(status_code=401, detail="invalid or expired token")
     return {"username": username}
+
 
 @app.post("/api/auth/mfa/setup")
 def mfa_setup(payload: dict):
@@ -524,6 +582,7 @@ def mfa_setup(payload: dict):
     issuer = "Fortude"
     otpauth = auth.generate_otpauth_url(secret, username, issuer)
     return {"secret": secret, "otpauth_url": otpauth}
+
 
 @app.post("/api/auth/mfa/verify")
 def mfa_verify(payload: dict):
@@ -544,6 +603,7 @@ def mfa_verify(payload: dict):
 
     auth.enable_mfa(username)
     return {"status": "ok"}
+
 
 @app.post("/api/auth/mfa/login")
 def mfa_login(payload: dict):
@@ -567,6 +627,7 @@ def mfa_login(payload: dict):
     token = auth.create_token_with_type(username, ttl=3600, token_type="session")
     return {"authenticated": True, "username": username, "token": token}
 
+
 @app.post("/api/auth/change")
 def change_user(payload: dict):
     token = payload.get("token")
@@ -586,7 +647,9 @@ def change_user(payload: dict):
     new_password = payload.get("new_password")
 
     if not new_username and not new_password:
-        raise HTTPException(status_code=400, detail="new_username or new_password required")
+        raise HTTPException(
+            status_code=400, detail="new_username or new_password required"
+        )
 
     try:
         auth.update_user(username, new_username=new_username, new_password=new_password)
@@ -597,9 +660,9 @@ def change_user(payload: dict):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-
 class IngestRequest(BaseModel):
     """A batch of documents for one registered source."""
+
     source: str
     documents: list[dict]
 
@@ -612,9 +675,12 @@ class IngestResponse(BaseModel):
     skipped: int
     events_appended: int
 
+
 """
 
 """
+
+
 @app.post("/api/mongodb/ingest")
 async def ingest_documents(request: IngestRequest):
     """
@@ -628,7 +694,7 @@ async def ingest_documents(request: IngestRequest):
         raise HTTPException(
             status_code=400,
             detail=f"Unknown source '{request.source}'. "
-                   f"Valid sources: {list(SOURCES.keys())}",
+            f"Valid sources: {list(SOURCES.keys())}",
         )
 
     summary = await persist(request.source, request.documents)
