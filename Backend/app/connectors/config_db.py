@@ -343,7 +343,7 @@ def _validate_pipeline(
 
         if missing:
             raise ValueError(f"{label} IDs not found in {table}: {missing}")
-        return name.strip()
+    return name.strip()
 
 
 def _save_pipeline(
