@@ -52,6 +52,9 @@ from app.mappers.jira_rule_engine import transform_canonical_tickets_full
 from app.mappers.jira_full_sync import jira_full_sync_poller,full_sync_jira
 import sqlite3
 
+from app.connectors.Infor_API_connector import router as infor_router 
+from app import connector_config
+
 BASE_FOLDER = Path(__file__).resolve().parents[2]
 OUTPUT_FOLDER = BASE_FOLDER / "local_data" / "output"
 INPUT_FOLDER = BASE_FOLDER / "local_data" / "input"  
@@ -82,9 +85,12 @@ async def lifespan(app: FastAPI):
         jira_full_sync_poller(interval_hours=JIRA_FULL_SYNC_INTERVAL_HOURS,initial_delay_seconds=JIRA_FULL_SYNC_DELAY_SECONDS)
     )
 
+    app.state.client = httpx.AsyncClient(timeout=30.0)
+
     try:
         yield
     finally:
+        await app.state.client.aclose()
         for task in (polling_task, jira_full_sync_task):
             if task:
                 task.cancel()
@@ -97,6 +103,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+app.include_router(infor_router) # registering infor router 
 
 app.add_middleware(
     CORSMiddleware,

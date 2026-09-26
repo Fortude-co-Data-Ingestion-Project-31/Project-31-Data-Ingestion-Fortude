@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Request, APIRouter
-import Backend.app.connector_config as connector_config
+from app import connector_config
 
 router = APIRouter(prefix="/infor", tags=["INFOR M3"])
 
