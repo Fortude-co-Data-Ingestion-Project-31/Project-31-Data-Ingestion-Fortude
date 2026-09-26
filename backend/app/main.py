@@ -498,6 +498,62 @@ def remove_output(item_id: int):
 
 
 # ---------------------------------------------------------------------------
+# Config — Pipelines
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/config/pipelines")
+def get_pipelines():
+    """List all pipelines in the database"""
+    return list_pipelines()
+
+
+@app.get("/api/config/pipelines/{pipeline_id}")
+def get_pipeline_by_id(pipeline_id: int):
+    """Retrieve a specific pipeline by its ID, returns 404 if not found."""
+    pipeline = get_pipeline(pipeline_id)
+    if pipeline is None:
+        raise HTTPException(status_code=404, detail="Pipeline not found.")
+    return pipeline
+
+
+@app.post("/api/config/pipelines", status_code=201)
+def create_pipeline(body: PipelineSave):
+    """Add a new pipeline"""
+    try:
+        return add_pipeline(
+            body.name, body.connector_id, body.rule_ids, body.output_ids
+        )
+    except PipelineDuplicateNameError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.put("/api/config/pipelines/{pipeline_id}")
+def edit_pipeline(pipeline_id: int, body: PipelineSave):
+    """Update an existing pipeline, returns 404 if the pipeline does not exist"""
+    try:
+        pipeline = update_pipeline(
+            pipeline_id, body.name, body.connector_id, body.rule_ids, body.output_ids
+        )
+    except PipelineDuplicateNameError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if pipeline is None:
+        raise HTTPException(status_code=404, detail="Pipeline not found.")
+    return pipeline
+
+
+@app.delete("/api/config/pipelines/{pipeline_id}", status_code=204)
+def remove_pipeline(pipeline_id: int):
+    """Delete a pipeline by its ID, returns 404 if the pipeline does not exist"""
+    if not delete_pipeline(pipeline_id):
+        raise HTTPException(status_code=404, detail="Pipeline not found.")
+
+
+# ---------------------------------------------------------------------------
 # Ingestion History
 # ---------------------------------------------------------------------------
 
