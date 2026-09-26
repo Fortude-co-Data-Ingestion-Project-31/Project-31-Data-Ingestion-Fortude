@@ -3,8 +3,8 @@ import json
 
 from fastapi import BackgroundTasks
 
-from backend.app import main
-from backend.app.connectors import config_db
+from app import main
+from app.connectors import config_db
 
 
 def run_endpoint(request):
