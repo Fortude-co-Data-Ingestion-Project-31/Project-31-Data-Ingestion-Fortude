@@ -11,3 +11,4 @@ openpyxl
 motor
 pymongo
 pytest_asyncio
+tzdata

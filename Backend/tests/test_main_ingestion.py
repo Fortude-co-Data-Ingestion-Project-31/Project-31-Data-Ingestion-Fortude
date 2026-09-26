@@ -174,9 +174,9 @@ def test_sharepoint_tables_extend_existing_config_and_history_db(monkeypatch, tm
     monkeypatch.setattr(config_db, "DB_PATH", tmp_path / "config.db")
     config_db.init_config_db()
 
-    assert any(item["name"] == "SharePoint KB" for item in config_db.list_connectors())
+    assert any(item["name"] == "SharePoint" for item in config_db.list_connectors())
     entry = config_db.add_history_entry(
-        connector="SharePoint KB", mapper="Document Mapper", rules="Default Rule",
+        connector="SharePoint", mapper="Document Mapper", rules="Default Rule",
         outputs="Kafka", processed=1,
     )
     config_db.save_sharepoint_sync_state(
