@@ -1,64 +1,63 @@
-import json
 import asyncio
-from contextlib import asynccontextmanager
+import json
 import logging
-import threading
-from pathlib import Path
-import httpx
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, StrictInt
 
-from app.outputs.MongoDB.mongo_db_common_func import persist
-from app.outputs.MongoDB.source_registration_table import SOURCES
+# Import Jira utilities directly from the project root
+import sys
+import threading
+from contextlib import asynccontextmanager
+from pathlib import Path
+
+from app import auth
+from app.connectors.config_db import (
+    PipelineDuplicateNameError,
+    add_connector,
+    add_history_entry,
+    add_output,
+    add_pipeline,
+    add_rule,
+    clear_sharepoint_delta_link,
+    delete_connector,
+    delete_history_entry,
+    delete_output,
+    delete_pipeline,
+    delete_rule,
+    get_pipeline,
+    get_sharepoint_delta_link,
+    get_sharepoint_item_mappings,
+    init_config_db,
+    list_connectors,
+    list_history,
+    list_outputs,
+    list_pipelines,
+    list_rules,
+    save_sharepoint_sync_state,
+    update_pipeline,
+)
 from app.connectors.local_folder_connector import read_local_text_files
-from app.mappers.local_file_mapper import map_local_files_to_canonical
 from app.connectors.sharepoint_connector import (
     SharePointDeltaStateError,
     get_sharepoint_drive_id,
     read_sharepoint_delta,
 )
+from app.mappers.local_file_mapper import map_local_files_to_canonical
+from app.outputs.MongoDB.mongo_db_common_func import persist
+from app.outputs.MongoDB.source_registration_table import SOURCES
 from app.rules.rule_handlers import apply_selected_rules
-from app import auth
-from app.connectors.config_db import (
-    init_config_db,
-    list_connectors,
-    add_connector,
-    delete_connector,
-    list_rules,
-    add_rule,
-    delete_rule,
-    list_outputs,
-    add_output,
-    delete_output,
-    add_pipeline,
-    list_pipelines,
-    get_pipeline,
-    update_pipeline,
-    delete_pipeline,
-    PipelineDuplicateNameError,
-    add_history_entry,
-    list_history,
-    delete_history_entry,
-    get_sharepoint_delta_link,
-    clear_sharepoint_delta_link,
-    get_sharepoint_item_mappings,
-    save_sharepoint_sync_state,
-)
-from fastapi import BackgroundTasks
-
-# Import Jira utilities directly from the project root
-import sys
+from fastapi import BackgroundTasks, FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, StrictInt
 
 sys.path.append(".")
+import sqlite3
+
 from app.connectors.Jira_API_connector import (
     fetch_full_bundle,
     get_recently_created_issues,
 )
+from app.mappers.jira_full_sync import full_sync_jira, jira_full_sync_poller
 from app.mappers.jira_mapper import map_jira_bundles_to_canonical
 from app.mappers.jira_rule_engine import transform_canonical_tickets_full
-from app.mappers.jira_full_sync import jira_full_sync_poller, full_sync_jira
-import sqlite3
 
 BASE_FOLDER = Path(__file__).resolve().parents[2]
 OUTPUT_FOLDER = BASE_FOLDER / "local_data" / "output"
@@ -77,7 +76,7 @@ polling_task = None
 
 
 # ---------------------------------------------------------------------------
-# Lifespan — initialise databases once on startup
+# Lifespan - initialise databases once on startup
 # ---------------------------------------------------------------------------
 
 
@@ -136,6 +135,22 @@ class IngestionRequest(BaseModel):
 
 class ConfigItemCreate(BaseModel):
     name: str
+
+
+class IngestRequest(BaseModel):
+    """A batch of documents for one registered source."""
+
+    source: str
+    documents: list[dict]
+
+
+class IngestResponse(BaseModel):
+    source: str
+    inserted: int
+    modified: int
+    matched: int
+    skipped: int
+    events_appended: int
 
 
 class PipelineSave(BaseModel):
@@ -388,7 +403,7 @@ async def ingest_local_folder(
 
 
 # ---------------------------------------------------------------------------
-# Config — Connectors
+# Config - Connectors
 # ---------------------------------------------------------------------------
 
 
@@ -424,7 +439,7 @@ def remove_connector(item_id: int):
 
 
 # ---------------------------------------------------------------------------
-# Config — Rules
+# Config - Rules
 # ---------------------------------------------------------------------------
 
 
@@ -460,7 +475,7 @@ def remove_rule(item_id: int):
 
 
 # ---------------------------------------------------------------------------
-# Config — Output Targets
+# Config - Output Targets
 # ---------------------------------------------------------------------------
 
 
@@ -498,7 +513,7 @@ def remove_output(item_id: int):
 
 
 # ---------------------------------------------------------------------------
-# Config — Pipelines
+# Config - Pipelines
 # ---------------------------------------------------------------------------
 
 
@@ -714,27 +729,6 @@ def change_user(payload: dict):
         raise HTTPException(status_code=400, detail="username already exists")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-
-class IngestRequest(BaseModel):
-    """A batch of documents for one registered source."""
-
-    source: str
-    documents: list[dict]
-
-
-class IngestResponse(BaseModel):
-    source: str
-    inserted: int
-    modified: int
-    matched: int
-    skipped: int
-    events_appended: int
-
-
-"""
-
-"""
 
 
 @app.post("/api/mongodb/ingest")
