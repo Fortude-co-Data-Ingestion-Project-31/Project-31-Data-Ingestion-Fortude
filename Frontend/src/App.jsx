@@ -19,6 +19,7 @@ import EntryDetail from "./pages/EntryDetail";
 import Login from "./pages/Login";
 import Settings from "./pages/Settings";
 import ChangeUsername from "./pages/ChangeUsername";
+import * as pipelineApi from "./api/pipelines";
 
 // A simple page-label map used by the badge component at the top of the app.
 const PAGE_LABELS = {
@@ -52,6 +53,47 @@ export default function App() {
   // Configuration loaded from the backend.  Each item is { id, name, created_at }.
   const [config, setConfig] = useState(EMPTY_CONFIG);
   const [configLoading, setConfigLoading] = useState(true);
+  const [pipelines, setPipelines] = useState([]);
+  const [pipelinesLoading, setPipelinesLoading] = useState(true);
+  const [pipelinesError, setPipelinesError] = useState("");
+  const pipelineRequest = useRef(null);
+
+  // Shared pipeline data stays available when switching between pages.
+  async function fetchPipelines() {
+    pipelineRequest.current?.abort();
+    const controller = new AbortController();
+    pipelineRequest.current = controller;
+    setPipelinesLoading(true);
+    setPipelinesError("");
+    try {
+      const data = await pipelineApi.listPipelines(controller.signal);
+      if (!controller.signal.aborted) setPipelines(data);
+    } catch (error) {
+      if (!controller.signal.aborted)
+        setPipelinesError(error.message || "Unable to load pipelines.");
+    } finally {
+      if (!controller.signal.aborted) setPipelinesLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    fetchPipelines();
+    return () => pipelineRequest.current?.abort();
+  }, []);
+
+  async function createPipeline(definition) {
+    const pipeline = await pipelineApi.createPipeline(definition);
+    setPipelines((items) => [...items, pipeline]);
+    return pipeline;
+  }
+
+  async function updatePipeline(id, definition) {
+    const pipeline = await pipelineApi.updatePipeline(id, definition);
+    setPipelines((items) =>
+      items.map((item) => (item.id === id ? pipeline : item))
+    );
+    return pipeline;
+  }
 
   const [nextId, setNextId] = useState(7);
   const [activeEntryId, setActiveEntryId] = useState(1);
@@ -384,6 +426,12 @@ export default function App() {
                 configLoading={configLoading}
                 addRow={addRow}
                 removeConfigRow={removeConfigRow}
+                pipelines={pipelines}
+                pipelinesLoading={pipelinesLoading}
+                pipelinesError={pipelinesError}
+                onRetryPipelines={fetchPipelines}
+                onCreatePipeline={createPipeline}
+                onUpdatePipeline={updatePipeline}
               />
             )}
             {page === "settings" && (

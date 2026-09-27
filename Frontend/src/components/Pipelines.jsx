@@ -1,5 +1,4 @@
-import React, { useEffect, useState } from "react";
-import { API_BASE } from "../data";
+import React, { useState } from "react";
 import Card from "./Card";
 
 const FIELD_STYLE =
@@ -7,11 +6,16 @@ const FIELD_STYLE =
 const BUTTON_STYLE =
   "rounded-lg bg-[color:var(--blue)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-40 disabled:cursor-not-allowed";
 
-export default function Pipelines({ config }) {
-  const [pipelines, setPipelines] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState("");
-  const [reload, setReload] = useState(0);
+// App owns saved data; this component owns only the current form and feedback.
+export default function Pipelines({
+  config,
+  pipelines = [],
+  loading = false,
+  loadError = "",
+  onRetry,
+  onCreate,
+  onUpdate,
+}) {
   const [creating, setCreating] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [name, setName] = useState("");
@@ -21,29 +25,6 @@ export default function Pipelines({ config }) {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [notice, setNotice] = useState("");
-
-  useEffect(() => {
-    const controller = new AbortController();
-    async function loadPipelines() {
-      setLoading(true);
-      setLoadError("");
-      try {
-        const response = await fetch(`${API_BASE}/api/config/pipelines`, {
-          signal: controller.signal,
-        });
-        if (!response.ok) throw new Error("Unable to load pipelines.");
-        const data = await response.json();
-        if (!controller.signal.aborted) setPipelines(data);
-      } catch (error) {
-        if (!controller.signal.aborted)
-          setLoadError("Unable to load pipelines. Please try again.");
-      } finally {
-        if (!controller.signal.aborted) setLoading(false);
-      }
-    }
-    loadPipelines();
-    return () => controller.abort();
-  }, [reload]);
 
   const hasChoices =
     config.connectors.length > 0 &&
@@ -89,41 +70,23 @@ export default function Pipelines({ config }) {
     setNotice("");
   }
 
-  // store pipeline using POST or PUT depending on whether it's a new pipeline or an edit
+  // Ask App to save; failed requests leave the form open with its values intact.
   async function savePipeline(event) {
     event.preventDefault();
     if (!valid || saving) return;
     setSaving(true);
     setSaveError("");
     try {
-      const url =
+      const definition = {
+        name: name.trim(),
+        connector_id: Number(connectorId),
+        rule_ids: ruleIds,
+        output_ids: outputIds,
+      };
+      const pipeline =
         editingId === null
-          ? `${API_BASE}/api/config/pipelines`
-          : `${API_BASE}/api/config/pipelines/${editingId}`;
-      const response = await fetch(url, {
-        method: editingId === null ? "POST" : "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: name.trim(),
-          connector_id: Number(connectorId),
-          rule_ids: ruleIds,
-          output_ids: outputIds,
-        }),
-      });
-      if (!response.ok) {
-        const body = await response.json().catch(() => ({}));
-        const message =
-          typeof body.detail === "string"
-            ? body.detail
-            : "Could not save pipeline. Check your selections and try again.";
-        throw new Error(message);
-      }
-      const pipeline = await response.json();
-      setPipelines((items) =>
-        editingId === null
-          ? [...items, pipeline]
-          : items.map((item) => (item.id === editingId ? pipeline : item))
-      );
+          ? await onCreate(definition)
+          : await onUpdate(editingId, definition);
       closeForm();
       setNotice(`Pipeline "${pipeline.name}" saved.`);
     } catch (error) {
@@ -146,11 +109,7 @@ export default function Pipelines({ config }) {
         ) : loadError ? (
           <div role="alert">
             <p>{loadError}</p>
-            <button
-              type="button"
-              className={BUTTON_STYLE}
-              onClick={() => setReload((value) => value + 1)}
-            >
+            <button type="button" className={BUTTON_STYLE} onClick={onRetry}>
               Retry
             </button>
           </div>

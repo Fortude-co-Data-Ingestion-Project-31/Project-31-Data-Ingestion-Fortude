@@ -69,6 +69,12 @@ export default function Configure({
   configLoading,
   addRow,
   removeConfigRow,
+  pipelines = [],
+  pipelinesLoading = false,
+  pipelinesError = "",
+  onRetryPipelines,
+  onCreatePipeline,
+  onUpdatePipeline,
 }) {
   // Which section's add-modal is open, or null if none.
   const [adding, setAdding] = useState(null); // "connectors" | "rules" | "outputs" | null
@@ -123,7 +129,15 @@ export default function Configure({
       )}
       {!configLoading && (
         <div className="mt-6">
-          <Pipelines config={config} />
+          <Pipelines
+            config={config}
+            pipelines={pipelines}
+            loading={pipelinesLoading}
+            loadError={pipelinesError}
+            onRetry={onRetryPipelines}
+            onCreate={onCreatePipeline}
+            onUpdate={onUpdatePipeline}
+          />
         </div>
       )}
     </section>
