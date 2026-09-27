@@ -14,7 +14,7 @@
  */
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import Configure from "../../src/pages/Configuration";
 
 const CONFIG = {
@@ -27,21 +27,6 @@ const CONFIG = {
 };
 
 describe("Configure", () => {
-  //returns an empty pipeline list without contacting the backend
-  beforeEach(() => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => [],
-      })
-    );
-  });
-
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
   //checks if the Configuration page shows a loading message instead of the sections while configLoading is true
   it("shows a loading message instead of the sections while configLoading is true", () => {
     render(
@@ -75,8 +60,8 @@ describe("Configure", () => {
 
     expect(screen.getByText("Rules")).toBeInTheDocument();
     expect(screen.getByText("Output Targets")).toBeInTheDocument();
-    expect(screen.getByText("0")).toBeInTheDocument(); // outputs count badge
-    // Wait for the mocked pipeline request and its React state updates to finish.
+    expect(screen.getAllByText("0")[0]).toBeInTheDocument(); // outputs count badge
+    // Pipeline data is supplied by App; there is no request in this page.
     expect(
       await screen.findByText("No saved pipelines yet.")
     ).toBeInTheDocument();
