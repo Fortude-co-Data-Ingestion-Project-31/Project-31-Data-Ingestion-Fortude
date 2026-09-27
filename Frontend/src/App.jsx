@@ -1,5 +1,11 @@
 import React, { useState, useRef, useEffect } from "react";
-import { COLORS, FONTS, GOOGLE_FONTS_IMPORT, LIGHT_THEME, DARK_THEME } from "./theme";
+import {
+  COLORS,
+  FONTS,
+  GOOGLE_FONTS_IMPORT,
+  LIGHT_THEME,
+  DARK_THEME,
+} from "./theme";
 import { INITIAL_HISTORY, API_BASE } from "./data";
 import Sidebar from "./components/Sidebar";
 import Header from "./components/Header";
@@ -7,7 +13,7 @@ import PageBadge from "./components/PageBadge";
 import Toast from "./components/Toast";
 import Dashboard from "./pages/Dashboard";
 import NewIngestion from "./pages/NewIngestion";
-import Configure from "./pages/Configure";
+import Configure from "./pages/Configuration";
 import History from "./pages/History";
 import EntryDetail from "./pages/EntryDetail";
 import Login from "./pages/Login";
@@ -53,7 +59,12 @@ export default function App() {
   const toastTimer = useRef(null);
 
   // Form state for the ingestion creation page.
-  const [form, setForm] = useState({ connector: "", mapper: "", rules: "", outputs: "" });
+  const [form, setForm] = useState({
+    connector: "",
+    mapper: "",
+    rules: "",
+    outputs: "",
+  });
 
   // Displays a brief success or status message near the bottom of the screen.
   const showToast = (msg) => {
@@ -104,7 +115,6 @@ export default function App() {
     }
   }, []);
 
-
   // ---------------------------------------------------------------------------
   // Load configuration from the backend on mount.
   // ---------------------------------------------------------------------------
@@ -129,7 +139,9 @@ export default function App() {
     }
   };
 
-  useEffect(() => { fetchConfig(); }, []);
+  useEffect(() => {
+    fetchConfig();
+  }, []);
 
   // ---------------------------------------------------------------------------
   // Load history from the backend on mount.
@@ -143,13 +155,15 @@ export default function App() {
         setHistory(data);
       }
     } catch {
-      // silently fail — history just stays empty
+      // silently fail - history just stays empty
     } finally {
       setHistoryLoading(false);
     }
   };
 
-  useEffect(() => { fetchHistory(); }, []);
+  useEffect(() => {
+    fetchHistory();
+  }, []);
 
   // ---------------------------------------------------------------------------
   // Navigation helpers
@@ -179,17 +193,21 @@ export default function App() {
     try {
       await fetch(`${API_BASE}/api/history/${id}`, { method: "DELETE" });
     } catch {
-      // best-effort — remove from UI regardless
+      // best-effort - remove from UI regardless
     }
     setHistory((h) => h.filter((e) => e.id !== id));
     showToast(`Entry ${id} deleted`);
   };
 
   // ---------------------------------------------------------------------------
-  // Config mutation helpers — talk to the backend, then refresh local state.
+  // Config mutation helpers - talk to the backend, then refresh local state.
   // ---------------------------------------------------------------------------
 
-  const KEY_TO_PATH = { connectors: "connectors", rules: "rules", outputs: "outputs" };
+  const KEY_TO_PATH = {
+    connectors: "connectors",
+    rules: "rules",
+    outputs: "outputs",
+  };
 
   const addRow = async (key, name) => {
     try {
@@ -207,23 +225,29 @@ export default function App() {
       setConfig((c) => ({ ...c, [key]: [...c[key], newItem] }));
       showToast(`"${newItem.name}" added.`);
     } catch {
-      showToast("Network error — could not add item.");
+      showToast("Network error - could not add item.");
     }
   };
 
   const removeConfigRow = async (key, id, name) => {
     try {
-      const res = await fetch(`${API_BASE}/api/config/${KEY_TO_PATH[key]}/${id}`, {
-        method: "DELETE",
-      });
+      const res = await fetch(
+        `${API_BASE}/api/config/${KEY_TO_PATH[key]}/${id}`,
+        {
+          method: "DELETE",
+        }
+      );
       if (!res.ok && res.status !== 404) {
         showToast("Failed to delete item.");
         return;
       }
-      setConfig((c) => ({ ...c, [key]: c[key].filter((item) => item.id !== id) }));
+      setConfig((c) => ({
+        ...c,
+        [key]: c[key].filter((item) => item.id !== id),
+      }));
       showToast(`"${name}" deleted.`);
     } catch {
-      showToast("Network error — could not delete item.");
+      showToast("Network error - could not delete item.");
     }
   };
 
@@ -257,7 +281,9 @@ export default function App() {
       if (data.message) {
         showToast(data.message);
       } else {
-        showToast(`Ingestion complete — ${data.processed} document(s) processed`);
+        showToast(
+          `Ingestion complete - ${data.processed} document(s) processed`
+        );
       }
 
       setForm({ connector: "", mapper: "", rules: "", outputs: "" });
@@ -275,11 +301,24 @@ export default function App() {
   const activeEntry = history.find((e) => e.id === activeEntryId) || history[0];
 
   if (!authenticated) {
-    return <Login onLogin={(username) => { setAuthenticated(true); setCurrentUser(username); }} />;
+    return (
+      <Login
+        onLogin={(username) => {
+          setAuthenticated(true);
+          setCurrentUser(username);
+        }}
+      />
+    );
   }
 
   return (
-    <div style={{ background: COLORS.bg, fontFamily: FONTS.body, minHeight: "100vh" }}>
+    <div
+      style={{
+        background: COLORS.bg,
+        fontFamily: FONTS.body,
+        minHeight: "100vh",
+      }}
+    >
       <style>{`
         ${GOOGLE_FONTS_IMPORT}
         body { margin: 0; }
@@ -288,13 +327,27 @@ export default function App() {
 
       <PageBadge label={PAGE_LABELS[page]} />
 
-      <div className="flex rounded-xl overflow-hidden mx-6 mb-6 relative" style={{ border: `1px solid ${COLORS.border}`, background: COLORS.bg }}>
+      <div
+        className="flex rounded-xl overflow-hidden mx-6 mb-6 relative"
+        style={{ border: `1px solid ${COLORS.border}`, background: COLORS.bg }}
+      >
         {isSidebarOpen && (
-          <div className="fixed inset-0 z-20 bg-black/30 transition-opacity duration-200 md:hidden" onClick={closeSidebar} />
+          <div
+            className="fixed inset-0 z-20 bg-black/30 transition-opacity duration-200 md:hidden"
+            onClick={closeSidebar}
+          />
         )}
 
         <div className="relative z-30">
-          {isSidebarOpen ? <Sidebar page={page} goTo={goTo} user={currentUser} onSignOut={signOut} onClose={closeSidebar} /> : null}
+          {isSidebarOpen ? (
+            <Sidebar
+              page={page}
+              goTo={goTo}
+              user={currentUser}
+              onSignOut={signOut}
+              onClose={closeSidebar}
+            />
+          ) : null}
         </div>
 
         <div className="flex-1 min-w-0">
@@ -303,17 +356,62 @@ export default function App() {
             onToggleSidebar={toggleSidebar}
             onOpenSettings={() => goTo("settings")}
             themeMode={themeMode}
-            onToggleTheme={() => setThemeMode((prev) => (prev === "dark" ? "light" : "dark"))}
+            onToggleTheme={() =>
+              setThemeMode((prev) => (prev === "dark" ? "light" : "dark"))
+            }
           />
 
           <div className="px-8 py-8">
-            {page === "dashboard" && <Dashboard history={history} config={config} goTo={goTo} openEntry={openEntry} />}
-            {page === "ingest" && <NewIngestion form={form} setForm={setForm} config={config} onStart={startIngestion} />}
-            {page === "configure" && <Configure config={config} configLoading={configLoading} addRow={addRow} removeConfigRow={removeConfigRow} />}
-            {page === "settings" && <Settings token={localStorage.getItem("auth_token")} currentUser={currentUser} onSaved={(username) => setCurrentUser(username)} goTo={goTo} />}
-            {page === "change-username" && <ChangeUsername token={localStorage.getItem("auth_token")} currentUser={currentUser} onSaved={(username) => setCurrentUser(username)} goTo={goTo} />}
-            {page === "history" && <History history={history} openEntry={openEntry} deleteEntry={deleteEntry} />}
-            {page === "entry" && <EntryDetail entry={activeEntry} goTo={goTo} />}
+            {page === "dashboard" && (
+              <Dashboard
+                history={history}
+                config={config}
+                goTo={goTo}
+                openEntry={openEntry}
+              />
+            )}
+            {page === "ingest" && (
+              <NewIngestion
+                form={form}
+                setForm={setForm}
+                config={config}
+                onStart={startIngestion}
+              />
+            )}
+            {page === "configure" && (
+              <Configure
+                config={config}
+                configLoading={configLoading}
+                addRow={addRow}
+                removeConfigRow={removeConfigRow}
+              />
+            )}
+            {page === "settings" && (
+              <Settings
+                token={localStorage.getItem("auth_token")}
+                currentUser={currentUser}
+                onSaved={(username) => setCurrentUser(username)}
+                goTo={goTo}
+              />
+            )}
+            {page === "change-username" && (
+              <ChangeUsername
+                token={localStorage.getItem("auth_token")}
+                currentUser={currentUser}
+                onSaved={(username) => setCurrentUser(username)}
+                goTo={goTo}
+              />
+            )}
+            {page === "history" && (
+              <History
+                history={history}
+                openEntry={openEntry}
+                deleteEntry={deleteEntry}
+              />
+            )}
+            {page === "entry" && (
+              <EntryDetail entry={activeEntry} goTo={goTo} />
+            )}
           </div>
         </div>
       </div>
