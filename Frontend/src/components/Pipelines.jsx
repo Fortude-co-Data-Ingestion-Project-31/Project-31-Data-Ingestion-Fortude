@@ -15,6 +15,7 @@ export default function Pipelines({
   onRetry,
   onCreate,
   onUpdate,
+  onDelete,
 }) {
   const [creating, setCreating] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -25,6 +26,27 @@ export default function Pipelines({
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [notice, setNotice] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+
+  // delete pipeline
+  async function confirmDelete() {
+    if (!deleteTarget || deleting) return;
+    setDeleting(true);
+    setDeleteError("");
+    try {
+      await onDelete(deleteTarget.id);
+      setNotice(`Pipeline "${deleteTarget.name}" deleted.`);
+      setDeleteTarget(null);
+    } catch (error) {
+      setDeleteError(
+        error.message || "Could not delete pipeline. Please try again."
+      );
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   const hasChoices =
     config.connectors.length > 0 &&
@@ -137,17 +159,71 @@ export default function Pipelines({
                     <button
                       type="button"
                       className={BUTTON_STYLE}
-                      disabled={creating || editingId !== null || saving}
+                      disabled={
+                        creating ||
+                        editingId !== null ||
+                        saving ||
+                        deleteTarget !== null
+                      }
                       aria-label={`Edit ${pipeline.name}`}
                       onClick={() => editPipeline(pipeline)}
                     >
                       Edit
+                    </button>
+                    <button
+                      type="button"
+                      className="ml-3 rounded-lg border border-[color:var(--border)] px-4 py-2 disabled:opacity-40"
+                      disabled={
+                        creating ||
+                        editingId !== null ||
+                        saving ||
+                        deleteTarget !== null
+                      }
+                      aria-label={`Delete ${pipeline.name}`}
+                      onClick={() => {
+                        setDeleteTarget(pipeline);
+                        setDeleteError("");
+                        setNotice("");
+                      }}
+                    >
+                      Delete
                     </button>
                   </li>
                 ))}
               </ul>
             )}
             {notice && <p role="status">{notice}</p>}
+            {deleteTarget && (
+              <section
+                aria-label="Confirm pipeline deletion"
+                className="rounded-lg border border-[color:var(--border)] p-4 space-y-3"
+              >
+                <p>
+                  Delete pipeline "{deleteTarget.name}"? Its connector, rules,
+                  and outputs will remain available.
+                </p>
+                {deleteError && <p role="alert">{deleteError}</p>}
+                <button
+                  type="button"
+                  className={BUTTON_STYLE}
+                  disabled={deleting}
+                  onClick={confirmDelete}
+                >
+                  {deleting ? "Deleting..." : "Confirm delete"}
+                </button>
+                <button
+                  type="button"
+                  className="ml-3 rounded-lg border border-[color:var(--border)] px-4 py-2 disabled:opacity-40"
+                  disabled={deleting}
+                  onClick={() => {
+                    setDeleteTarget(null);
+                    setDeleteError("");
+                  }}
+                >
+                  Cancel
+                </button>
+              </section>
+            )}
             {!hasChoices && (
               <p>
                 Add at least one connector, rule, and output target before
@@ -158,7 +234,7 @@ export default function Pipelines({
               <button
                 type="button"
                 className={BUTTON_STYLE}
-                disabled={!hasChoices}
+                disabled={!hasChoices || deleteTarget !== null}
                 onClick={() => {
                   setCreating(true);
                   setNotice("");

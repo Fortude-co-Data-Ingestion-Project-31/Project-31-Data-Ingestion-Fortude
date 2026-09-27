@@ -14,6 +14,7 @@ async function requestPipeline(path = "", options = {}) {
         : "Unable to complete the pipeline request. Please try again."
     );
   }
+  if (response.status === 204) return;
   return response.json();
 }
 
@@ -35,4 +36,8 @@ export function updatePipeline(id, definition) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(definition),
   });
+}
+
+export function deletePipeline(id) {
+  return requestPipeline(`/${id}`, { method: "DELETE" });
 }

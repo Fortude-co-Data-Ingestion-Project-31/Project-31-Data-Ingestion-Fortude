@@ -75,6 +75,7 @@ export default function Configure({
   onRetryPipelines,
   onCreatePipeline,
   onUpdatePipeline,
+  onDeletePipeline,
 }) {
   // Which section's add-modal is open, or null if none.
   const [adding, setAdding] = useState(null); // "connectors" | "rules" | "outputs" | null
@@ -137,6 +138,7 @@ export default function Configure({
             onRetry={onRetryPipelines}
             onCreate={onCreatePipeline}
             onUpdate={onUpdatePipeline}
+            onDelete={onDeletePipeline}
           />
         </div>
       )}

@@ -95,6 +95,11 @@ export default function App() {
     return pipeline;
   }
 
+  async function deletePipeline(id) {
+    await pipelineApi.deletePipeline(id);
+    setPipelines((items) => items.filter((item) => item.id !== id));
+  }
+
   const [nextId, setNextId] = useState(7);
   const [activeEntryId, setActiveEntryId] = useState(1);
   const [toast, setToast] = useState("");
@@ -432,6 +437,7 @@ export default function App() {
                 onRetryPipelines={fetchPipelines}
                 onCreatePipeline={createPipeline}
                 onUpdatePipeline={updatePipeline}
+                onDeletePipeline={deletePipeline}
               />
             )}
             {page === "settings" && (
