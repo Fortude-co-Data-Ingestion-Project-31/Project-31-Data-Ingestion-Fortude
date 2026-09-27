@@ -9,7 +9,6 @@ import {
 import { INITIAL_HISTORY, API_BASE } from "./data";
 import Sidebar from "./components/Sidebar";
 import Header from "./components/Header";
-import PageBadge from "./components/PageBadge";
 import Toast from "./components/Toast";
 import Dashboard from "./pages/Dashboard";
 import NewIngestion from "./pages/NewIngestion";
@@ -20,17 +19,6 @@ import Login from "./pages/Login";
 import Settings from "./pages/Settings";
 import ChangeUsername from "./pages/ChangeUsername";
 import * as pipelineApi from "./api/pipelines";
-
-// A simple page-label map used by the badge component at the top of the app.
-const PAGE_LABELS = {
-  dashboard: "Dashboard Page",
-  ingest: "Ingest Page",
-  history: "History Page",
-  configure: "Configuration Page",
-  settings: "Settings",
-  "change-username": "Change Username",
-  entry: "Ingestion Entry Page",
-};
 
 // Empty config shape used while the backend data is loading.
 const EMPTY_CONFIG = { connectors: [], rules: [], outputs: [] };
@@ -43,6 +31,11 @@ export default function App() {
 
   // Tracks which page is currently visible in the main content area.
   const [page, setPage] = useState("dashboard");
+  const contentRef = useRef(null);
+
+  useEffect(() => {
+    contentRef.current?.scrollTo({ top: 0 });
+  }, [page]);
   // Controls whether the left-hand navigation panel is visible.
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
@@ -228,7 +221,7 @@ export default function App() {
 
   const goTo = (p) => {
     setPage(p);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    if (window.innerWidth < 768) setIsSidebarOpen(false);
   };
 
   const openEntry = (id) => {
@@ -363,7 +356,8 @@ export default function App() {
       style={{
         background: COLORS.bg,
         fontFamily: FONTS.body,
-        minHeight: "100vh",
+        height: "100dvh",
+        overflow: "hidden",
       }}
     >
       <style>{`
@@ -372,11 +366,9 @@ export default function App() {
         select:focus { outline: none; border-color: ${COLORS.blue} !important; }
       `}</style>
 
-      <PageBadge label={PAGE_LABELS[page]} />
-
       <div
-        className="flex rounded-xl overflow-hidden mx-6 mb-6 relative"
-        style={{ border: `1px solid ${COLORS.border}`, background: COLORS.bg }}
+        className="flex h-full overflow-hidden relative"
+        style={{ background: COLORS.bg }}
       >
         {isSidebarOpen && (
           <div
@@ -385,7 +377,7 @@ export default function App() {
           />
         )}
 
-        <div className="relative z-30">
+        <div className="fixed inset-y-0 left-0 z-30 md:static md:shrink-0 h-full">
           {isSidebarOpen ? (
             <Sidebar
               page={page}
@@ -397,7 +389,7 @@ export default function App() {
           ) : null}
         </div>
 
-        <div className="flex-1 min-w-0">
+        <div className="flex flex-col flex-1 min-w-0 min-h-0">
           <Header
             notificationCount={3}
             onToggleSidebar={toggleSidebar}
@@ -408,7 +400,12 @@ export default function App() {
             }
           />
 
-          <div className="px-8 py-8">
+          <div
+            ref={contentRef}
+            role="main"
+            aria-label="Page content"
+            className="flex-1 min-h-0 overflow-y-auto p-4 md:p-6"
+          >
             {page === "dashboard" && (
               <Dashboard
                 history={history}
