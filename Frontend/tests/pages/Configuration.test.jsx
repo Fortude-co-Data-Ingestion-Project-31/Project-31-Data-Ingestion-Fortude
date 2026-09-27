@@ -14,19 +14,34 @@
  */
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import Configure from "../../src/pages/Configuration";
 
 const CONFIG = {
   connectors: [
-    { id: 1, name: "Infor Sales" },
-    { id: 2, name: "Jira Support" },
+    { id: 1, name: "Infor" },
+    { id: 2, name: "Jira" },
   ],
   rules: [{ id: 3, name: "Infor Sales Rules" }],
   outputs: [],
 };
 
 describe("Configure", () => {
+  //returns an empty pipeline list without contacting the backend
+  beforeEach(() => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => [],
+      })
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   //checks if the Configuration page shows a loading message instead of the sections while configLoading is true
   it("shows a loading message instead of the sections while configLoading is true", () => {
     render(
@@ -39,11 +54,11 @@ describe("Configure", () => {
     );
 
     expect(screen.getByText(/loading configuration/i)).toBeInTheDocument();
-    expect(screen.queryByText("Infor Sales")).not.toBeInTheDocument();
+    expect(screen.queryByText("Infor")).not.toBeInTheDocument();
   });
 
   //checks if the Configuration page renders each section with its items and item count
-  it("renders each section with its items and item count", () => {
+  it("renders each section with its items and item count", async () => {
     render(
       <Configure
         config={CONFIG}
@@ -54,13 +69,17 @@ describe("Configure", () => {
     );
 
     expect(screen.getByText("Connectors")).toBeInTheDocument();
-    expect(screen.getByText("Infor Sales")).toBeInTheDocument();
-    expect(screen.getByText("Jira Support")).toBeInTheDocument();
+    expect(screen.getByText("Infor")).toBeInTheDocument();
+    expect(screen.getByText("Jira")).toBeInTheDocument();
     expect(screen.getByText("2")).toBeInTheDocument(); // connectors count badge
 
     expect(screen.getByText("Rules")).toBeInTheDocument();
     expect(screen.getByText("Output Targets")).toBeInTheDocument();
     expect(screen.getByText("0")).toBeInTheDocument(); // outputs count badge
+    // Wait for the mocked pipeline request and its React state updates to finish.
+    expect(
+      await screen.findByText("No saved pipelines yet.")
+    ).toBeInTheDocument();
   });
 
   //checks if the Configuration page opens the Add Connector modal and submits a trimmed name via addRow
@@ -149,12 +168,8 @@ describe("Configure", () => {
     );
 
     const deleteButtons = screen.getAllByRole("button", { name: "Delete" });
-    await user.click(deleteButtons[0]); // "Infor Sales" is the first connector row
+    await user.click(deleteButtons[0]); // "Infor" is the first connector row
 
-    expect(removeConfigRow).toHaveBeenCalledWith(
-      "connectors",
-      1,
-      "Infor Sales"
-    );
+    expect(removeConfigRow).toHaveBeenCalledWith("connectors", 1, "Infor");
   });
 });
