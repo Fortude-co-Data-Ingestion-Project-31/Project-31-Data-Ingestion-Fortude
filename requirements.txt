@@ -8,3 +8,9 @@ python-docx
 pypdf
 
 httpx
+python-pptx
+openpyxl
+motor
+pymongo
+pytest_asyncio
+tzdata
