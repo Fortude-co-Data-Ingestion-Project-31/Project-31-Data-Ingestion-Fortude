@@ -51,6 +51,7 @@ async def get_purchase_order_lines(puno: str, request: Request):
     return response.json()
 
 
+
 # now second infor endpoints customer order lines
 # each endpoint should have one responsibility
 
@@ -77,8 +78,32 @@ async def get_customer_order_lines(orno:str, request:Request):
     response.raise_for_status()
     return response.json()
 
+@router.get("/items/{itno}")
+async def get_item_master_data(itno: str, company: str, request: Request):
+    """Fetch one item's master data from Infor and return its raw JSON response.
 
+    itno is the item number. company identifies the M3 company to search.
+    """
+    # Reuse the app's HTTP client and get a token for this request.
+    client = request.app.state.client
+    token = await get_infor_token(client)
 
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/json",
+    }
+    url = f"{connector_config.INFOR_BASE_URL.rstrip('/')}/MMS200MI/Get"
+
+    # Send the item number and company as Infor's input fields.
+    response = await client.get(
+        url,
+        headers=headers,
+        params={"ITNO": itno, "CONO": company},
+    )
+
+    # Stop on HTTP errors, otherwise return the response for inspection or mapping.
+    response.raise_for_status()
+    return response.json()
 
 
 
