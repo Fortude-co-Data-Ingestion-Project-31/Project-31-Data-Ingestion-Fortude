@@ -3,10 +3,8 @@ import Card from "./Card";
 
 const FIELD_STYLE =
   "w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--bg)] px-3 py-2 text-[color:var(--text)]";
-const BUTTON_STYLE =
-  "rounded-lg bg-[color:var(--blue)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-40 disabled:cursor-not-allowed";
+const BUTTON_STYLE = "config-button config-button-primary";
 
-// App owns saved data; this component owns only the current form and feedback.
 export default function Pipelines({
   config,
   pipelines = [],
@@ -172,7 +170,7 @@ export default function Pipelines({
                     </button>
                     <button
                       type="button"
-                      className="ml-3 rounded-lg border border-[color:var(--border)] px-4 py-2 disabled:opacity-40"
+                      className="ml-3 config-button config-button-danger"
                       disabled={
                         creating ||
                         editingId !== null ||
@@ -205,7 +203,7 @@ export default function Pipelines({
                 {deleteError && <p role="alert">{deleteError}</p>}
                 <button
                   type="button"
-                  className={BUTTON_STYLE}
+                  className="config-button config-button-danger"
                   disabled={deleting}
                   onClick={confirmDelete}
                 >
@@ -213,7 +211,7 @@ export default function Pipelines({
                 </button>
                 <button
                   type="button"
-                  className="ml-3 rounded-lg border border-[color:var(--border)] px-4 py-2 disabled:opacity-40"
+                  className="ml-3 config-button config-button-secondary"
                   disabled={deleting}
                   onClick={() => {
                     setDeleteTarget(null);
@@ -233,7 +231,7 @@ export default function Pipelines({
             {!creating && editingId === null ? (
               <button
                 type="button"
-                className={BUTTON_STYLE}
+                className="config-button config-button-create"
                 disabled={!hasChoices || deleteTarget !== null}
                 onClick={() => {
                   setCreating(true);
@@ -329,7 +327,7 @@ export default function Pipelines({
                     </button>
                     <button
                       type="button"
-                      className="rounded-lg border border-[color:var(--border)] px-4 py-2"
+                      className="config-button config-button-secondary"
                       onClick={closeForm}
                     >
                       Cancel

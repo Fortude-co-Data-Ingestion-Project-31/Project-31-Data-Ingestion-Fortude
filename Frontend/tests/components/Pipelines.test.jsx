@@ -24,16 +24,24 @@ const PIPELINE = {
 };
 
 describe("Pipelines", () => {
-  // The first click only asks for confirmation; Cancel leaves the pipeline alone.
+  // The first click only asks for confirmation, cancel does not change the list
   it("cancels deletion without calling onDelete", async () => {
     const user = userEvent.setup();
     const onDelete = vi.fn();
-    render(<Pipelines config={CONFIG} pipelines={[PIPELINE]} onDelete={onDelete} />);
-    await user.click(screen.getByRole("button", { name: "Delete Test Pipeline" }));
-    expect(screen.getByRole("region", { name: "Confirm pipeline deletion" })).toHaveTextContent('Delete pipeline "Test Pipeline"?');
+    render(
+      <Pipelines config={CONFIG} pipelines={[PIPELINE]} onDelete={onDelete} />
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Delete Test Pipeline" })
+    );
+    expect(
+      screen.getByRole("region", { name: "Confirm pipeline deletion" })
+    ).toHaveTextContent('Delete pipeline "Test Pipeline"?');
     expect(onDelete).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(screen.queryByRole("region", { name: "Confirm pipeline deletion" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("region", { name: "Confirm pipeline deletion" })
+    ).not.toBeInTheDocument();
     expect(screen.getByText("Test Pipeline")).toBeInTheDocument();
     expect(onDelete).not.toHaveBeenCalled();
   });
@@ -42,15 +50,26 @@ describe("Pipelines", () => {
   it("deletes the confirmed pipeline and waits for completion", async () => {
     const user = userEvent.setup();
     let finishDelete;
-    const onDelete = vi.fn(() => new Promise((resolve) => { finishDelete = resolve; }));
-    const { rerender } = render(<Pipelines config={CONFIG} pipelines={[PIPELINE]} onDelete={onDelete} />);
-    await user.click(screen.getByRole("button", { name: "Delete Test Pipeline" }));
+    const onDelete = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          finishDelete = resolve;
+        })
+    );
+    const { rerender } = render(
+      <Pipelines config={CONFIG} pipelines={[PIPELINE]} onDelete={onDelete} />
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Delete Test Pipeline" })
+    );
     await user.click(screen.getByRole("button", { name: "Confirm delete" }));
     expect(onDelete).toHaveBeenCalledWith(10);
     expect(screen.getByRole("button", { name: "Deleting..." })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
     finishDelete();
-    expect(await screen.findByRole("status")).toHaveTextContent('Pipeline "Test Pipeline" deleted.');
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      'Pipeline "Test Pipeline" deleted.'
+    );
     // App supplies the list after the successful request.
     rerender(<Pipelines config={CONFIG} pipelines={[]} onDelete={onDelete} />);
     expect(screen.getByText("No saved pipelines yet.")).toBeInTheDocument();
@@ -59,13 +78,23 @@ describe("Pipelines", () => {
   // A failed request keeps the row and allows the same deletion to be retried.
   it("keeps the pipeline when deletion fails", async () => {
     const user = userEvent.setup();
-    const onDelete = vi.fn().mockRejectedValueOnce(new Error("Unable to delete"));
-    render(<Pipelines config={CONFIG} pipelines={[PIPELINE]} onDelete={onDelete} />);
-    await user.click(screen.getByRole("button", { name: "Delete Test Pipeline" }));
+    const onDelete = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("Unable to delete"));
+    render(
+      <Pipelines config={CONFIG} pipelines={[PIPELINE]} onDelete={onDelete} />
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Delete Test Pipeline" })
+    );
     await user.click(screen.getByRole("button", { name: "Confirm delete" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("Unable to delete");
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Unable to delete"
+    );
     expect(screen.getByText("Test Pipeline")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Confirm delete" })).toBeEnabled();
+    expect(
+      screen.getByRole("button", { name: "Confirm delete" })
+    ).toBeEnabled();
     onDelete.mockResolvedValueOnce();
     await user.click(screen.getByRole("button", { name: "Confirm delete" }));
     expect(await screen.findByRole("status")).toHaveTextContent("deleted");

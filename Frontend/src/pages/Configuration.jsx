@@ -42,14 +42,14 @@ function AddModal({ prefix, onConfirm, onCancel }) {
             <button
               type="button"
               onClick={onCancel}
-              className="inline-flex items-center justify-center rounded-2xl border border-[color:var(--border)] bg-[color:var(--bg)] px-4 py-2 text-sm font-medium text-[color:var(--text)] transition hover:bg-[color:var(--borderSoft)]"
+              className="config-button config-button-secondary"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={!name.trim()}
-              className="inline-flex items-center justify-center rounded-2xl bg-[color:var(--blue)] px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="config-button config-button-create"
             >
               Add
             </button>
@@ -100,6 +100,7 @@ export default function Configure({
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {SECTIONS.map(([key, title, prefix]) => (
             <Card
+              roundedActions
               key={key}
               title={title}
               count={config[key].length}
@@ -109,6 +110,7 @@ export default function Configure({
               <div style={{ maxHeight: 420, overflowY: "auto" }}>
                 {config[key].map((item) => (
                   <Row
+                    roundedActions
                     key={item.id}
                     label={item.name}
                     onEdit={() => {}}

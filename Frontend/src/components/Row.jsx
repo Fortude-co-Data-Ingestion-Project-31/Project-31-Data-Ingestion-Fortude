@@ -1,10 +1,16 @@
 import React from "react";
 import { COLORS } from "../theme";
 
-export default function Row({ label, sub, onEdit, onDelete }) {
+export default function Row({
+  label,
+  sub,
+  onEdit,
+  onDelete,
+  roundedActions = false,
+}) {
   return (
     <div
-      className="flex items-center justify-between px-5 py-3"
+      className="flex flex-wrap items-center justify-between gap-3 px-5 py-3"
       style={{ borderBottom: `1px solid ${COLORS.borderSoft}` }}
     >
       <div>
@@ -17,12 +23,16 @@ export default function Row({ label, sub, onEdit, onDelete }) {
           </span>
         )}
       </div>
-      <div className="flex items-center gap-5">
+      <div className="flex shrink-0 items-center gap-2">
         {onEdit && (
           <button
             onClick={onEdit}
-            className="text-sm bg-transparent border-none cursor-pointer font-medium"
-            style={{ color: COLORS.blue }}
+            className={
+              roundedActions
+                ? "config-button config-button-primary"
+                : "text-sm bg-transparent border-none cursor-pointer font-medium"
+            }
+            style={roundedActions ? undefined : { color: COLORS.blue }}
           >
             Edit
           </button>
@@ -30,8 +40,12 @@ export default function Row({ label, sub, onEdit, onDelete }) {
         {onDelete && (
           <button
             onClick={onDelete}
-            className="text-sm bg-transparent border-none cursor-pointer font-medium"
-            style={{ color: COLORS.red }}
+            className={
+              roundedActions
+                ? "config-button config-button-danger"
+                : "text-sm bg-transparent border-none cursor-pointer font-medium"
+            }
+            style={roundedActions ? undefined : { color: COLORS.red }}
           >
             Delete
           </button>

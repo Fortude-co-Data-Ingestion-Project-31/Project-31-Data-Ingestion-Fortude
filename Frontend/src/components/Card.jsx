@@ -8,6 +8,7 @@ export default function Card({
   children,
   footer,
   onFooterClick,
+  roundedActions = false,
 }) {
   return (
     <div
@@ -42,14 +43,24 @@ export default function Card({
       <div className="flex flex-col">{children}</div>
       {footer && (
         <div
-          onClick={onFooterClick}
+          onClick={roundedActions ? undefined : onFooterClick}
           className="text-center py-3 text-sm cursor-pointer font-semibold"
           style={{
             color: COLORS.orange,
             borderTop: `1px solid ${COLORS.borderSoft}`,
           }}
         >
-          {footer}
+          {roundedActions ? (
+            <button
+              type="button"
+              className="config-button config-button-create"
+              onClick={onFooterClick}
+            >
+              {footer}
+            </button>
+          ) : (
+            footer
+          )}
         </div>
       )}
     </div>
