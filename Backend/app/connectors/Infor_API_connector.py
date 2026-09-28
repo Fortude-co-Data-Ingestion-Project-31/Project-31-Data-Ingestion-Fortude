@@ -1,7 +1,49 @@
-from fastapi import FastAPI, Request, APIRouter
+from fastapi import FastAPI, Request, APIRouter, Query
 from app import connector_config
 
 router = APIRouter(prefix="/infor", tags=["INFOR M3"])
+
+
+@router.get("/inventory/by-order/{order_number}")
+async def get_inventory_by_order(
+    order_number: str,
+    company: str,
+    request: Request,
+    warehouse: str,
+    item_code: str,
+    line_number: str | None = None,
+    line_suffix: str | None = None,
+    transaction_type: str | None = None,
+    maxrecs: int = Query(default=20, ge=1, le=1000),
+):
+    """Return raw balance records for an order, item, and warehouse.
+
+    Optional line and stock transaction type fields narrow the request.
+    This endpoint is not a complete inventory export.
+    """
+    client = request.app.state.client
+    token = await get_infor_token(client)
+
+    # cono selects the company; the uppercase fields are transaction inputs.
+    params = {
+        "cono": company,
+        "RIDN": order_number,
+        "WHLO": warehouse,
+        "ITNO": item_code,
+        "maxrecs": maxrecs,
+    }
+    for field, value in (("RIDL", line_number), ("RIDX", line_suffix),
+                         ("TTYP", transaction_type)):
+        if value is not None:
+            params[field] = value
+
+    response = await client.get(
+        f"{connector_config.INFOR_BASE_URL.rstrip('/')}/MMS060MI/LstBalIDByOrd",
+        headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+        params=params,
+    )
+    response.raise_for_status()
+    return response.json()
 
 
 # function to get the api token
@@ -104,7 +146,6 @@ async def get_item_master_data(itno: str, company: str, request: Request):
     # Stop on HTTP errors, otherwise return the response for inspection or mapping.
     response.raise_for_status()
     return response.json()
-
 
 
 

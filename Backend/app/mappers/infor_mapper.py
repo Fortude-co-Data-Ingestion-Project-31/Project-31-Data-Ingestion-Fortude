@@ -12,6 +12,8 @@ The mapper’s responsibilities are to:
 """
 
 from datetime import datetime
+from math import isfinite
+from urllib.parse import quote
 
 
 # Check Infor Errors and extracts records from results
@@ -219,6 +221,90 @@ def map_item_master_record(record, tenant, company):
     return mapped_record
 
 
+def map_inventory_record(record, tenant, company):
+    """Standardise one stock balance record using the request's tenant and company."""
+    if not isinstance(record, dict):
+        raise ValueError("Inventory record must be a dictionary.")
+
+    # Keep the stock identity separate from the order used to look it up.
+    identifiers = {
+        "tenant": tenant,
+        "company": company,
+        "item_code": record.get("ITNO"),
+        "warehouse_code": record.get("WHLO"),
+        "location_code": record.get("WHSL"),
+    }
+    for name, value in identifiers.items():
+        if value is None or str(value).strip() == "":
+            raise ValueError(f"Missing inventory identifier: {name}")
+        identifiers[name] = str(value).strip()
+
+    # Reject a company mismatch rather than label stock with the wrong company.
+    source_company = record.get("CONO")
+    if source_company is not None and str(source_company).strip() != identifiers["company"]:
+        raise ValueError("Inventory company does not match the requested company.")
+
+    # Lot and container may be blank, but must be present to identify the balance.
+    for field, name in (("BANO", "lot_number"), ("CAMU", "container"),
+                        ("REPN", "receiving_number")):
+        if field not in record or record[field] is None:
+            raise ValueError(f"Missing inventory identity field: {field}")
+        identifiers[name] = str(record[field]).strip()
+
+    # Escape separators so different stock identities cannot share an ID.
+    id_parts = [identifiers["tenant"], identifiers["company"], "inventory",
+                identifiers["item_code"], identifiers["warehouse_code"],
+                identifiers["location_code"], identifiers["lot_number"],
+                identifiers["container"], identifiers["receiving_number"]]
+    document_id = "infor_m3:" + ":".join(quote(part, safe="") for part in id_parts)
+
+    # Missing quantities stay None. Zero means a known quantity of zero.
+    quantities = {}
+    for field in ("STQT", "ALQT", "MVB1", "MVB2"):
+        value = record.get(field)
+        if value is None or (isinstance(value, str) and not value.strip()):
+            quantities[field] = None
+        else:
+            try:
+                number = float(value)
+            except (TypeError, ValueError):
+                raise ValueError(f"Invalid inventory quantity for {field}: {value!r}")
+            if isinstance(value, bool) or not isfinite(number):
+                raise ValueError(f"Invalid inventory quantity for {field}: {value!r}")
+            quantities[field] = number
+
+    mapped_record = {
+        "source": "infor_m3",
+        "record_type": "inventory",
+        "document_id": document_id,
+        **identifiers,
+        "item_name": record.get("ITDS"),
+        "unit_of_measure": record.get("UNMS"),
+        "balance_status_code": record.get("STAS"),
+        "approved_on_hand_quantity": quantities["STQT"],
+        "allocated_quantity": quantities["ALQT"],
+        # These are distinct Infor measures, not total warehouse availability.
+        "movable_net_1": quantities["MVB1"],
+        "movable_net_2": quantities["MVB2"],
+        "content": record.copy(),
+    }
+    return mapped_record
+
+
+def map_inventory_response(payload, tenant, company):
+    """Extract and map the balance records in one inventory API response.
+
+    This maps only the returned batch; it does not fetch additional pages.
+    """
+    records = extract_infor_records(payload)
+    if payload.get("wasTerminated"):
+        raise ValueError("Infor terminated the inventory response; it may be incomplete.")
+    mapped_records = []
+    for record in records:
+        mapped_records.append(map_inventory_record(record, tenant, company))
+    return mapped_records
+
+
 def map_item_master_response(payload, tenant, company):
     """Extract items from an Infor response and return a list of mapped items."""
     records = extract_infor_records(payload)
@@ -249,4 +335,3 @@ def map_infor_response(payload, order_type, tenant, company, order_number):
     
     # return mapped records
     return mapped_records
-
