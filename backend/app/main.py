@@ -7,6 +7,15 @@ import sys
 import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
+import httpx
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, model_validator
+from typing import Literal
+import re
+
+from connectors.Infor_API_connector import fetch_order_lines, router as infor_router
+from mappers.infor_mapper import map_infor_response_to_canonical
 
 from app import auth
 from app.connectors.config_db import (
@@ -85,6 +94,7 @@ async def lifespan(app: FastAPI):
     global polling_task
     auth.init_db()
     init_config_db()
+    app.state.client = httpx.AsyncClient(timeout=30.0)
     polling_task = asyncio.create_task(poll_sharepoint_ingestion())
     jira_full_sync_task = asyncio.create_task(
         jira_full_sync_poller(
@@ -104,10 +114,12 @@ async def lifespan(app: FastAPI):
                 except asyncio.CancelledError:
                     pass
         polling_task = None
+        await app.state.client.aclose()
         jira_full_sync_task = None
 
 
 app = FastAPI(lifespan=lifespan)
+app.include_router(infor_router)
 
 app.add_middleware(
     CORSMiddleware,
@@ -131,6 +143,18 @@ class IngestionRequest(BaseModel):
     rule: str | None = None
     mapper: str | None = None
     outputs: str | None = None
+    order_type: Literal["purchase", "customer"] | None = None
+    order_number: str | None = None
+
+    @model_validator(mode="after")
+    def validate_infor_order(self):
+        if "infor" in self.connector.lower():
+            if self.order_type is None or not self.order_number:
+                raise ValueError("Infor requires an order type and order number.")
+            self.order_number = self.order_number.strip()
+            if not re.fullmatch(r"[A-Za-z0-9_-]{1,50}", self.order_number):
+                raise ValueError("Order number must contain 1–50 letters, digits, underscores or hyphens.")
+        return self
 
 
 class ConfigItemCreate(BaseModel):
@@ -326,15 +350,31 @@ async def trigger_full_sync(projects: list[str] | None = None):
 
 
 @app.post("/api/ingest/local-folder")
-async def ingest_local_folder(
-    request: IngestionRequest, background_tasks: BackgroundTasks
-):
+async def ingest_local_folder(request: IngestionRequest, background_tasks: BackgroundTasks, http_request: Request):
     connector_name = request.connector.lower()
 
     if "infor" in connector_name:
-        raise HTTPException(
-            status_code=501, detail="Connector 'Infor Sales' is not completed yet."
+        if request.order_type is None or request.order_number is None:
+            raise HTTPException(422, "Infor requires an order type and order number.")
+        rule = request.rule or "Default Rule"
+        raw_data = await fetch_order_lines(request.order_type, request.order_number, http_request)
+        documents = map_infor_response_to_canonical(
+            raw_data, request.order_type, request.order_number,
         )
+        documents = [apply_selected_rules(document, rule) for document in documents]
+        OUTPUT_FOLDER.mkdir(parents=True, exist_ok=True)
+        output_name = f"infor_{request.order_type}_{request.order_number}.json"
+        (OUTPUT_FOLDER / output_name).write_text(
+            json.dumps(documents, indent=2, ensure_ascii=False), encoding="utf-8",
+        )
+        message = f"Saved {len(documents)} Infor order line(s) to local JSON: {output_name}"
+        add_history_entry(
+            connector=request.connector, mapper=request.mapper or "",
+            rules=rule, outputs="Local JSON", status="completed",
+            processed=len(documents), message=message,
+        )
+        return {"status": "success", "processed": len(documents),
+                "rule": rule, "message": message}
 
     if "jira" in connector_name:
         # Start a background polling task for Jira
