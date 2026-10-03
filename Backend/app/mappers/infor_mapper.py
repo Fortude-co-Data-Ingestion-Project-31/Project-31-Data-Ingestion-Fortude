@@ -59,7 +59,7 @@ def extract_infor_records(payload:dict):
     return records
 
 # transforms purchase order line into a standard format.
-def map_purchase_order_line(record, tenant, company, order_number):
+def map_purchase_order_line(record, tenant, order_number):
 
      line_number = record.get("PNLI")
      line_suffix = record.get("PNLS")
@@ -68,7 +68,6 @@ def map_purchase_order_line(record, tenant, company, order_number):
      id_parts = [
         "infor_m3",
         tenant,
-        company,
         "purchase",
         order_number,
         line_number,
@@ -96,7 +95,6 @@ def map_purchase_order_line(record, tenant, company, order_number):
      mapped_record = {
      "source": "infor_m3",
      "tenant": tenant,
-     "company": company,
      "order_type": "purchase",
      "order_number": order_number,
      "line_number": record.get("PNLI"),
@@ -112,7 +110,7 @@ def map_purchase_order_line(record, tenant, company, order_number):
      return mapped_record
 
 # transfomrs customer order line into standard format.
-def map_customer_order_line(record, tenant, company, order_number):
+def map_customer_order_line(record, tenant, order_number):
     line_number = record.get("PONR")
     line_suffix = record.get("POSX")
 
@@ -120,7 +118,6 @@ def map_customer_order_line(record, tenant, company, order_number):
     id_parts = [
         "infor_m3",
         tenant,
-        company,
         "customer",
         order_number,
         line_number,
@@ -148,7 +145,6 @@ def map_customer_order_line(record, tenant, company, order_number):
     mapped_record = {
         "source": "infor_m3",
         "tenant": tenant,
-        "company": company,
         "order_type": "customer",
         "order_number": order_number,
         "line_number": line_number,
@@ -319,17 +315,17 @@ def map_item_master_response(payload, tenant, company):
 
 
 # Extracts records and call the correct mapper for each line.
-def map_infor_response(payload, order_type, tenant, company, order_number):
+def map_infor_response(payload, order_type, tenant, order_number):
 
     records = extract_infor_records(payload)
     mapped_records = []
     # for each record:
     for record in records:
         if order_type == "purchase":
-            mapped_record = map_purchase_order_line(record, tenant, company, order_number)
+            mapped_record = map_purchase_order_line(record, tenant, order_number)
 
         else:
-            mapped_record = map_customer_order_line(record, tenant, company, order_number)
+            mapped_record = map_customer_order_line(record, tenant, order_number)
 
         mapped_records.append(mapped_record)
     

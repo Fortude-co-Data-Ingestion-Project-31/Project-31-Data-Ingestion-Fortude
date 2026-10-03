@@ -119,5 +119,75 @@ async def get_purchase_order_lines(puno: str, request: Request):
     response.raise_for_status()
     return response.json()
 
+@router.get("/customer-orders/{orno}/lines")
+async def get_customer_order_lines(orno: str, request: Request):
+    """
+    Get the line items for a customer order and return Infor's JSON response.
 
+    orno is the customer order number.
+    """
+    client = request.app.state.client
+    token = await get_infor_token(client)
 
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/json"
+    }
+
+    url = f"{setting('INFOR_BASE_URL').rstrip('/')}/OIS100MI/LstLine"
+
+    response = await client.get(
+        url,
+        headers=headers,
+        params={"ORNO": orno}
+    )
+
+    response.raise_for_status()
+    return response.json()
+
+async def fetch_order_lines(
+    order_type: str,
+    order_number: str,
+    request: Request
+):
+    """
+    Choose the purchase or customer order function for the ingestion process.
+
+    Return the order lines, or turn connection problems and invalid responses
+    into clear API errors.
+    """
+    try:
+        if order_type == "purchase":
+            return await get_purchase_order_lines(order_number, request)
+
+        if order_type == "customer":
+            return await get_customer_order_lines(order_number, request)
+
+        raise HTTPException(
+            status_code=422,
+            detail="Order type must be purchase or customer."
+        )
+
+    except httpx.TimeoutException as exc:
+        raise HTTPException(
+            status_code=504,
+            detail="Infor request timed out. Please retry."
+        ) from exc
+
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Infor request failed (HTTP {exc.response.status_code})."
+        ) from exc
+
+    except httpx.RequestError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail="Unable to connect to Infor."
+        ) from exc
+
+    except (ValueError, KeyError, AttributeError) as exc:
+        raise HTTPException(
+            status_code=502,
+            detail="Infor returned an invalid response."
+        ) from exc
