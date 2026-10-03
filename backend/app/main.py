@@ -8,6 +8,8 @@ import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+import httpx
+
 from app import auth
 from app.connectors.config_db import (
     PipelineDuplicateNameError,
