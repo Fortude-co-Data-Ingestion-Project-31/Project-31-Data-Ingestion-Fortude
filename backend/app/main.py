@@ -15,7 +15,7 @@ from typing import Literal
 import re
 
 from connectors.Infor_API_connector import fetch_order_lines, router as infor_router
-from mappers.infor_mapper import map_infor_response_to_canonical
+from mappers.infor_mapper import map_infor_response
 
 from app import auth
 from app.connectors.config_db import (
@@ -68,13 +68,16 @@ from app.mappers.jira_full_sync import full_sync_jira, jira_full_sync_poller
 from app.mappers.jira_mapper import map_jira_bundles_to_canonical
 from app.mappers.jira_rule_engine import transform_canonical_tickets_full
 
+from app.connectors.Infor_API_connector import router as infor_router 
+from app import connector_config
+
 BASE_FOLDER = Path(__file__).resolve().parents[2]
 OUTPUT_FOLDER = BASE_FOLDER / "local_data" / "output"
 INPUT_FOLDER = BASE_FOLDER / "local_data" / "input"
 
 # BASE_FOLDER = Path(__file__).resolve().parents[2]
 # OUTPUT_FOLDER = BASE_FOLDER / "local_data" / "output"
-POLL_INTERVAL_SECONDS = 10
+POLL_INTERVAL_SECONDS = 300
 JIRA_FULL_SYNC_INTERVAL_HOURS = 24
 JIRA_FULL_SYNC_DELAY_SECONDS = 0  # JIRA_FULL_SYNC_INTERVAL_HOURS in seconds
 SHAREPOINT_POLL_RULE = "Knowledge Base Rules"
@@ -103,9 +106,12 @@ async def lifespan(app: FastAPI):
         )
     )
 
+    app.state.client = httpx.AsyncClient(timeout=30.0)
+
     try:
         yield
     finally:
+        await app.state.client.aclose()
         for task in (polling_task, jira_full_sync_task):
             if task:
                 task.cancel()
@@ -119,7 +125,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
-app.include_router(infor_router)
+app.include_router(infor_router) # registering infor router 
 
 app.add_middleware(
     CORSMiddleware,
@@ -150,10 +156,21 @@ class IngestionRequest(BaseModel):
     def validate_infor_order(self):
         if "infor" in self.connector.lower():
             if self.order_type is None or not self.order_number:
-                raise ValueError("Infor requires an order type and order number.")
+                raise ValueError(
+                    "Infor requires an order type and order number."
+                )
+
             self.order_number = self.order_number.strip()
-            if not re.fullmatch(r"[A-Za-z0-9_-]{1,50}", self.order_number):
-                raise ValueError("Order number must contain 1–50 letters, digits, underscores or hyphens.")
+
+            if not re.fullmatch(
+                r"[A-Za-z0-9_-]{1,50}",
+                self.order_number
+            ):
+                raise ValueError(
+                    "Order number must contain 1-50 letters, digits, "
+                    "underscores or hyphens."
+                )
+
         return self
 
 
@@ -358,8 +375,8 @@ async def ingest_local_folder(request: IngestionRequest, background_tasks: Backg
             raise HTTPException(422, "Infor requires an order type and order number.")
         rule = request.rule or "Default Rule"
         raw_data = await fetch_order_lines(request.order_type, request.order_number, http_request)
-        documents = map_infor_response_to_canonical(
-            raw_data, request.order_type, request.order_number,
+        documents = map_infor_response(
+            raw_data, request.order_type, connector_config.INFOR_TENANT, request.order_number
         )
         documents = [apply_selected_rules(document, rule) for document in documents]
         OUTPUT_FOLDER.mkdir(parents=True, exist_ok=True)
