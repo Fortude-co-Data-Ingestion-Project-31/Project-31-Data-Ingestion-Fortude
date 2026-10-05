@@ -1,14 +1,59 @@
+from fastapi import FastAPI, Request, APIRouter, Query
+from app import connector_config
 from fastapi import FastAPI, Request, APIRouter, HTTPException
 import os
 import httpx
 from dotenv import load_dotenv
-import connector_config
+
 
 load_dotenv()
 
 router = APIRouter(prefix="/infor", tags=["INFOR M3"])
 
 
+@router.get("/inventory/by-order/{order_number}")
+async def get_inventory_by_order(
+    order_number: str,
+    company: str,
+    request: Request,
+    warehouse: str,
+    item_code: str,
+    line_number: str | None = None,
+    line_suffix: str | None = None,
+    transaction_type: str | None = None,
+    maxrecs: int = Query(default=20, ge=1, le=1000),
+):
+    """Return raw balance records for an order, item, and warehouse.
+
+    Optional line and stock transaction type fields narrow the request.
+    This endpoint is not a complete inventory export.
+    """
+    client = request.app.state.client
+    token = await get_infor_token(client)
+
+    # cono selects the company; the uppercase fields are transaction inputs.
+    params = {
+        "cono": company,
+        "RIDN": order_number,
+        "WHLO": warehouse,
+        "ITNO": item_code,
+        "maxrecs": maxrecs,
+    }
+    for field, value in (("RIDL", line_number), ("RIDX", line_suffix),
+                         ("TTYP", transaction_type)):
+        if value is not None:
+            params[field] = value
+
+    response = await client.get(
+        f"{connector_config.INFOR_BASE_URL.rstrip('/')}/MMS060MI/LstBalIDByOrd",
+        headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+        params=params,
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+# function to get the api token
 def setting(name):
     """Read an Infor setting from the environment, then try connector_config.
 
@@ -74,13 +119,12 @@ async def get_purchase_order_lines(puno: str, request: Request):
     response.raise_for_status()
     return response.json()
 
+@router.get("/customer-orders/{orno}/lines")
+async def get_customer_order_lines(orno: str, request: Request):
+    """
+    Get the line items for a customer order and return Infor's JSON response.
 
-@router.get("/customer-orders/{orno}/lines") 
-async def get_customer_order_lines(orno:str, request:Request):
-    """Get the line items for a customer order and return Infor's JSON response.
-
-    orno is the customer order number. Use the app's shared HTTP client and
-    an access token to request its lines from Infor.
+    orno is the customer order number.
     """
     client = request.app.state.client
     token = await get_infor_token(client)
@@ -88,39 +132,62 @@ async def get_customer_order_lines(orno:str, request:Request):
     headers = {
         "Authorization": f"Bearer {token}",
         "Accept": "application/json"
-    
     }
 
     url = f"{setting('INFOR_BASE_URL').rstrip('/')}/OIS100MI/LstLine"
-    
-    response = await client.get( 
-        url,
-        headers=headers, 
-        params={"ORNO": orno}
 
+    response = await client.get(
+        url,
+        headers=headers,
+        params={"ORNO": orno}
     )
 
     response.raise_for_status()
     return response.json()
 
-
-async def fetch_order_lines(order_type: str, order_number: str, request: Request):
-    """Choose the purchase or customer order function for the ingestion process.
+async def fetch_order_lines(
+    order_type: str,
+    order_number: str,
+    request: Request
+):
+    """
+    Choose the purchase or customer order function for the ingestion process.
 
     Return the order lines, or turn connection problems and invalid responses
-    into clear API errors. Reject order types other than purchase or customer.
+    into clear API errors.
     """
     try:
         if order_type == "purchase":
             return await get_purchase_order_lines(order_number, request)
+
         if order_type == "customer":
             return await get_customer_order_lines(order_number, request)
-        raise HTTPException(422, "Order type must be purchase or customer.")
+
+        raise HTTPException(
+            status_code=422,
+            detail="Order type must be purchase or customer."
+        )
+
     except httpx.TimeoutException as exc:
-        raise HTTPException(504, "Infor request timed out. Please retry.") from exc
+        raise HTTPException(
+            status_code=504,
+            detail="Infor request timed out. Please retry."
+        ) from exc
+
     except httpx.HTTPStatusError as exc:
-        raise HTTPException(502, f"Infor request failed (HTTP {exc.response.status_code}).") from exc
+        raise HTTPException(
+            status_code=502,
+            detail=f"Infor request failed (HTTP {exc.response.status_code})."
+        ) from exc
+
     except httpx.RequestError as exc:
-        raise HTTPException(502, "Unable to connect to Infor.") from exc
+        raise HTTPException(
+            status_code=502,
+            detail="Unable to connect to Infor."
+        ) from exc
+
     except (ValueError, KeyError, AttributeError) as exc:
-        raise HTTPException(502, "Infor returned an invalid response.") from exc
+        raise HTTPException(
+            status_code=502,
+            detail="Infor returned an invalid response."
+        ) from exc
