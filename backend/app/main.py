@@ -119,7 +119,7 @@ async def lifespan(app: FastAPI):
                 except asyncio.CancelledError:
                     pass
         polling_task = None
-        await app.state.client.aclose()
+
         jira_full_sync_task = None
 
 
