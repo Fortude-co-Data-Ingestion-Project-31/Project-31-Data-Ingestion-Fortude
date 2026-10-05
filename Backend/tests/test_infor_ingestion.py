@@ -7,8 +7,8 @@ from fastapi import BackgroundTasks, HTTPException, Request, FastAPI
 from pydantic import ValidationError
 
 from backend.app import main
-from connectors import Infor_API_connector as infor
-from mappers.infor_mapper import map_infor_response
+from app.connectors import Infor_API_connector as infor
+from app.mappers.infor_mapper import map_infor_response
 
 
 @pytest.mark.parametrize(
@@ -75,9 +75,7 @@ def test_ingests_order_and_records_actual_output(
 
     assert result["processed"] == 1
 
-    documents = json.loads(
-        (tmp_path / f"infor_{order_type}_123.json").read_text()
-    )
+    documents = json.loads((tmp_path / f"infor_{order_type}_123.json").read_text())
 
     assert documents[0]["content"]["ITNO"] == "ITEM"
     assert documents[0]["tags"] == ["sales"]
@@ -156,9 +154,7 @@ def test_empty_order_is_valid():
         ("purchase", "PPS200MI", "PUNO"),
     ],
 )
-def test_infor_authentication_and_transaction(
-    monkeypatch, kind, transaction, param
-):
+def test_infor_authentication_and_transaction(monkeypatch, kind, transaction, param):
     for name in [
         "CLIENT_ID",
         "CLIENT_SECRET",
@@ -189,10 +185,7 @@ def test_infor_authentication_and_transaction(
 
         assert request.url.path == f"/m3/{transaction}/LstLine"
         assert request.url.params[param] == "123"
-        assert (
-            request.headers["Authorization"]
-            == "Bearer test-token"
-        )
+        assert request.headers["Authorization"] == "Bearer test-token"
 
         return httpx.Response(
             200,
@@ -227,14 +220,10 @@ def test_infor_authentication_and_transaction(
                 ),
             )
 
-    assert asyncio.run(run()) == {
-        "results": [{"records": []}]
-    }
+    assert asyncio.run(run()) == {"results": [{"records": []}]}
 
 
-def test_upstream_failure_does_not_write_output_or_history(
-    monkeypatch, tmp_path
-):
+def test_upstream_failure_does_not_write_output_or_history(monkeypatch, tmp_path):
     async def fail(*args):
         raise HTTPException(
             502,
@@ -254,9 +243,7 @@ def test_upstream_failure_does_not_write_output_or_history(
     monkeypatch.setattr(
         main,
         "add_history_entry",
-        lambda **kwargs: pytest.fail(
-            "Unexpected history"
-        ),
+        lambda **kwargs: pytest.fail("Unexpected history"),
     )
 
     with pytest.raises(HTTPException):
@@ -294,13 +281,7 @@ def test_http_validation_and_registered_raw_route(monkeypatch):
         async def get(self, url, **kwargs):
             return httpx.Response(
                 200,
-                json={
-                    "records": [
-                        {
-                            "ORNO": kwargs["params"]["ORNO"]
-                        }
-                    ]
-                },
+                json={"records": [{"ORNO": kwargs["params"]["ORNO"]}]},
                 request=httpx.Request("GET", url),
             )
 
@@ -325,15 +306,10 @@ def test_http_validation_and_registered_raw_route(monkeypatch):
 
     assert response.status_code == 422
 
-    response = client.get(
-        "/infor/customer-orders/123/lines"
-    )
+    response = client.get("/infor/customer-orders/123/lines")
 
     assert response.status_code == 200
-    assert (
-        response.json()["records"][0]["ORNO"]
-        == "123"
-    )
+    assert response.json()["records"][0]["ORNO"] == "123"
 
 
 def test_missing_credentials_report_configuration_error(
@@ -363,11 +339,7 @@ def test_missing_credentials_report_configuration_error(
     )
 
     with pytest.raises(HTTPException) as error:
-        asyncio.run(
-            infor.get_infor_token(
-                AsyncMock()
-            )
-        )
+        asyncio.run(infor.get_infor_token(AsyncMock()))
 
     assert error.value.status_code == 503
     assert "INFOR_TOKEN_URL" in error.value.detail

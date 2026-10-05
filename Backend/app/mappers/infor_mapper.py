@@ -1,6 +1,6 @@
 """
 The Connector receives raw order lines and item master data.
-The Mapper should receive that response and convert it into a consisten structure.
+The Mapper should receive that response and convert it into a consistent structure.
 
 The mapper’s responsibilities are to:
 - Extract the order records from the API response.
@@ -17,22 +17,23 @@ from urllib.parse import quote
 
 
 # Check Infor Errors and extracts records from results
-def extract_infor_records(payload:dict):
+def extract_infor_records(payload: dict):
     # Infor API connector passes the response to this function 'payload'
 
     if type(payload) is dict:
-
         results = payload.get("results")
-        if type(results) is list:
-            # Check for errors from Infor response and return a list of raw order line records
-            if payload["nrOfFailedTransactions"] > 0:
-                raise ValueError ("Record does not exist")
-
-        else:
-            raise ValueError ("Infor Results must be a list")    
+        if not isinstance(results, list):
+            raise ValueError("Infor results must be a list.")
+        failed_transactions = payload.get("nrOfFailedTransactions", 0)
+        try:
+            failed_transactions = int(failed_transactions)
+        except (TypeError, ValueError):
+            raise ValueError("Invalid nrOfFailedTransactions value")
+        if failed_transactions > 0:
+            raise ValueError("Record does not exist")
 
     else:
-        raise ValueError ("Infor Response must be a dictionary")
+        raise ValueError("Infor Response must be a dictionary")
 
     records = []
 
@@ -55,33 +56,32 @@ def extract_infor_records(payload:dict):
 
         records.extend(batch)
 
-
     return records
+
 
 # transforms purchase order line into a standard format.
 def map_purchase_order_line(record, tenant, order_number):
+    line_number = record.get("PNLI")
+    line_suffix = record.get("PNLS")
 
-     line_number = record.get("PNLI")
-     line_suffix = record.get("PNLS")
-
-     # All parts are needed to reliably identify this order line.
-     id_parts = [
+    # All parts are needed to reliably identify this order line.
+    id_parts = [
         "infor_m3",
         tenant,
         "purchase",
         order_number,
         line_number,
         line_suffix,
-     ]
+    ]
 
-     if any(part is None or str(part).strip() == "" for part in id_parts):
-          raise ValueError("Cannot create document ID: missing order identifiers.")
+    if any(part is None or str(part).strip() == "" for part in id_parts):
+        raise ValueError("Cannot create document ID: missing order identifiers.")
 
-     document_id = ":".join(str(part).strip() for part in id_parts)
-     # Copy values into clearly named fields without changing the raw record.
-     quantities = {}
+    document_id = ":".join(str(part).strip() for part in id_parts)
+    # Copy values into clearly named fields without changing the raw record.
+    quantities = {}
 
-     for field in ("ORQA", "RVQA", "IVQA"):
+    for field in ("ORQA", "RVQA", "IVQA"):
         value = record.get(field)
 
         if value is None or (isinstance(value, str) and not value.strip()):
@@ -91,25 +91,26 @@ def map_purchase_order_line(record, tenant, order_number):
                 quantities[field] = float(value)
             except (TypeError, ValueError):
                 raise ValueError(f"Invalid quantity for {field}: {value!r}")
-            
-     mapped_record = {
-     "source": "infor_m3",
-     "tenant": tenant,
-     "order_type": "purchase",
-     "order_number": order_number,
-     "line_number": record.get("PNLI"),
-     "line_suffix": record.get("PNLS"),
-     "item_code": record.get("ITNO"),
-     "ordered_quantity": quantities["ORQA"],
-     "received_quantity": quantities["RVQA"],
-     "invoiced_quantity": quantities["IVQA"],
-     "content": record.copy(),
-     "document_id" : document_id # adding document id, for later recognition if needed
-}
 
-     return mapped_record
+    mapped_record = {
+        "source": "infor_m3",
+        "tenant": tenant,
+        "order_type": "purchase",
+        "order_number": order_number,
+        "line_number": record.get("PNLI"),
+        "line_suffix": record.get("PNLS"),
+        "item_code": record.get("ITNO"),
+        "ordered_quantity": quantities["ORQA"],
+        "received_quantity": quantities["RVQA"],
+        "invoiced_quantity": quantities["IVQA"],
+        "content": record.copy(),
+        "document_id": document_id,  # adding document id, for later recognition if needed
+    }
 
-# transfomrs customer order line into standard format.
+    return mapped_record
+
+
+# transforms customer order line into standard format.
 def map_customer_order_line(record, tenant, order_number):
     line_number = record.get("PONR")
     line_suffix = record.get("POSX")
@@ -157,7 +158,6 @@ def map_customer_order_line(record, tenant, order_number):
         "document_id": document_id,
     }
 
-
     return mapped_record
 
 
@@ -165,8 +165,9 @@ def map_customer_order_line(record, tenant, order_number):
     Convert one raw item dictionary into a standardised item dictionary.
     The caller supplies the tenant and company used to fetch the item.
 """
+
+
 def map_item_master_record(record, tenant, company):
-    
     if not isinstance(record, dict):
         raise ValueError("Item record must be a dictionary.")
 
@@ -175,7 +176,9 @@ def map_item_master_record(record, tenant, company):
     # These identifiers are needed to recognise the same item on later runs.
     for value in (tenant, company, item_code):
         if value is None or str(value).strip() == "":
-            raise ValueError("Cannot create item ID: missing tenant, company, or item code.")
+            raise ValueError(
+                "Cannot create item ID: missing tenant, company, or item code."
+            )
 
     # Keep identifiers as text so leading zeros are preserved.
     tenant = str(tenant).strip()
@@ -237,21 +240,34 @@ def map_inventory_record(record, tenant, company):
 
     # Reject a company mismatch rather than label stock with the wrong company.
     source_company = record.get("CONO")
-    if source_company is not None and str(source_company).strip() != identifiers["company"]:
+    if (
+        source_company is not None
+        and str(source_company).strip() != identifiers["company"]
+    ):
         raise ValueError("Inventory company does not match the requested company.")
 
     # Lot and container may be blank, but must be present to identify the balance.
-    for field, name in (("BANO", "lot_number"), ("CAMU", "container"),
-                        ("REPN", "receiving_number")):
+    for field, name in (
+        ("BANO", "lot_number"),
+        ("CAMU", "container"),
+        ("REPN", "receiving_number"),
+    ):
         if field not in record or record[field] is None:
             raise ValueError(f"Missing inventory identity field: {field}")
         identifiers[name] = str(record[field]).strip()
 
     # Escape separators so different stock identities cannot share an ID.
-    id_parts = [identifiers["tenant"], identifiers["company"], "inventory",
-                identifiers["item_code"], identifiers["warehouse_code"],
-                identifiers["location_code"], identifiers["lot_number"],
-                identifiers["container"], identifiers["receiving_number"]]
+    id_parts = [
+        identifiers["tenant"],
+        identifiers["company"],
+        "inventory",
+        identifiers["item_code"],
+        identifiers["warehouse_code"],
+        identifiers["location_code"],
+        identifiers["lot_number"],
+        identifiers["container"],
+        identifiers["receiving_number"],
+    ]
     document_id = "infor_m3:" + ":".join(quote(part, safe="") for part in id_parts)
 
     # Missing quantities stay None. Zero means a known quantity of zero.
@@ -294,7 +310,9 @@ def map_inventory_response(payload, tenant, company):
     """
     records = extract_infor_records(payload)
     if payload.get("wasTerminated"):
-        raise ValueError("Infor terminated the inventory response; it may be incomplete.")
+        raise ValueError(
+            "Infor terminated the inventory response; it may be incomplete."
+        )
     mapped_records = []
     for record in records:
         mapped_records.append(map_inventory_record(record, tenant, company))
@@ -316,7 +334,6 @@ def map_item_master_response(payload, tenant, company):
 
 # Extracts records and call the correct mapper for each line.
 def map_infor_response(payload, order_type, tenant, order_number):
-
     records = extract_infor_records(payload)
     mapped_records = []
     # for each record:
@@ -328,6 +345,6 @@ def map_infor_response(payload, order_type, tenant, order_number):
             mapped_record = map_customer_order_line(record, tenant, order_number)
 
         mapped_records.append(mapped_record)
-    
+
     # return mapped records
     return mapped_records
