@@ -1,0 +1,78 @@
+name: CD
+
+# Continuous delivery workflow for the data ingestion platform.
+# This pipeline builds the application artifacts and then runs the deployment
+# step. Replace the placeholder deployment command with your real hosting target.
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Deployment target
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+          - qa
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-package:
+    name: Build release artifacts
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Compile backend application
+        run: |
+          # This is a quick sanity check that the Python service still imports.
+          python -m compileall backend/app
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Build frontend application
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+  deploy:
+    name: Deploy to target environment
+    needs: build-and-package
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ github.event.inputs.environment || 'staging' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Placeholder deployment step
+        run: |
+          echo "Deployment step is intentionally left as a placeholder."
+          echo "Add your real deployment action here, for example:"
+          echo "- Azure Web App deploy"
+          echo "- Docker image push to a registry"
+          echo "- SSH deployment to a VM or Kubernetes cluster"
+          echo "This keeps the pipeline structure clear while allowing secrets"
+          echo "and infrastructure settings to be added safely per environment."
