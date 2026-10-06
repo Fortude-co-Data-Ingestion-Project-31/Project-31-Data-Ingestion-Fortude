@@ -1,0 +1,116 @@
+name: CI/CD
+
+# Run the same quality gates before changes merge and after they reach main.
+# A manual run is useful when you want to produce fresh artifacts without a push.
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+# Cancel stale runs for the same branch or pull request. This avoids spending
+# runner time finishing checks for commits that have already been superseded.
+concurrency:
+  group: ci-cd-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# The workflow only checks out source and uploads build artifacts, so it does
+# not need write access to repository contents or any deployment credentials.
+permissions:
+  contents: read
+
+jobs:
+  backend-tests:
+    name: Backend tests
+    runs-on: ubuntu-latest
+    env:
+      # Tests import modules both as `backend.app` and as `app`; expose the
+      # repository root and backend directory while running from backend/.
+      PYTHONPATH: ..:.
+    steps:
+      # Pin the runtime to the version documented for local backend development.
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          # Reuse pip's download cache between runs, and invalidate it whenever
+          # the repository's Python dependency list changes.
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      # Exclude tests that need live Jira/Mongo services or a locally running
+      # API. Keep deterministic unit and mocked integration tests in the gate.
+      # `-m "not integration"` also excludes tests explicitly marked as external.
+      - name: Run backend tests
+        working-directory: backend
+        run: >-
+          python -m pytest tests ../tests/backend -q
+          --ignore=tests/mongo_db_test
+          --ignore=tests/test_requests.py
+          --ignore=tests/testFile.py
+          -m "not integration"
+
+      # A source artifact is useful for a future backend deployment job. Limit
+      # publication to main/manual runs; PRs only need a pass/fail result.
+      - name: Upload backend source artifact
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-source-${{ github.sha }}
+          path: |
+            backend/app/
+            requirements.txt
+          if-no-files-found: error
+          retention-days: 14
+
+  frontend-checks:
+    name: Frontend tests and build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        # Run npm commands from the frontend project so the lockfile, scripts,
+        # and generated dist/ directory all resolve to the correct location.
+        working-directory: Frontend
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          # npm ci is paired with this cache so dependency downloads can be
+          # reused without ever changing the committed package lockfile.
+          cache: npm
+          cache-dependency-path: Frontend/package-lock.json
+
+      - name: Install locked frontend dependencies
+        run: npm ci
+
+      - name: Run frontend unit tests
+        run: npm test
+
+      - name: Build the production frontend
+        run: npm run build
+
+      # Keep pull requests focused on validation. Successful main-branch pushes
+      # and manual runs also retain a downloadable copy of the production build.
+      - name: Upload frontend build artifact
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist-${{ github.sha }}
+          path: Frontend/dist/
+          if-no-files-found: error
+          retention-days: 14

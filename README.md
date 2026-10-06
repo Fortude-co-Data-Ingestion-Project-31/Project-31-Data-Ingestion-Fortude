@@ -41,6 +41,31 @@ This system is composed of:
 	npm run dev
 	```
 
+## CI/CD pipeline
+
+The GitHub Actions workflow in `.github/workflows/ci-cd.yml` runs when a pull
+request targets `main`, when a commit is pushed to `main`, or when started
+manually with **Actions → CI/CD → Run workflow**.
+
+The workflow checks both parts of the application:
+
+- **Backend:** installs `requirements.txt` using Python 3.10 and runs pytest.
+  Tests requiring live Jira/Mongo services or a locally running API are left
+  out of the CI gate; deterministic unit and mocked integration tests still
+  run.
+- **Frontend:** installs the exact versions in `Frontend/package-lock.json`,
+  runs the Vitest suite, and creates a production build with Vite.
+
+Successful pushes to `main` and manual runs upload two downloadable artifacts:
+`backend-source-<commit-sha>` (the backend application source and dependency
+manifest) and `frontend-dist-<commit-sha>` (the generated `Frontend/dist/`
+build). GitHub retains these artifacts for 14 days. Pull requests run the same
+checks but do not publish artifacts.
+
+This workflow prepares build artifacts but does not deploy to a live
+environment. A deployment job can be added once a hosting target and its
+required credentials are configured.
+
 ## Folder structure
 
 A concise overview of the repository layout and the purpose of important folders and files:
