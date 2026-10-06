@@ -77,14 +77,14 @@ jobs:
           PYTHONPATH: backend:backend:.
         run: >-
           python -m pytest
-          backend/tests/test_auth.py
-          backend/tests/test_infor_ingestion.py
-          backend/tests/test_kafka_output.py
-          backend/tests/test_main_ingestion.py
-          backend/tests/test_pipeline.py
-          backend/tests/test_pipeline_api.py
-          backend/tests/test_rule_handlers.py
-          backend/tests/test_sharepoint_connector.py
+          Backend/tests/test_auth.py
+          Backend/tests/test_infor_ingestion.py
+          Backend/tests/test_kafka_output.py
+          Backend/tests/test_main_ingestion.py
+          Backend/tests/test_pipeline.py
+          Backend/tests/test_pipeline_api.py
+          Backend/tests/test_rule_handlers.py
+          Backend/tests/test_sharepoint_connector.py
           -q
           -m "not integration"
 
