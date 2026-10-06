@@ -1,3 +1,4 @@
+sys.path.append(".")
 import asyncio
 import json
 import logging
@@ -14,7 +15,7 @@ from pydantic import BaseModel, model_validator
 from typing import Literal
 import re
 
-from app.connectors.Infor_API_connector import (
+from .connectors.Infor_API_connector import (
     fetch_order_lines,
     router as infor_router,
     setting as infor_setting,
@@ -62,7 +63,7 @@ from fastapi import BackgroundTasks, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, StrictInt
 
-sys.path.append(".")
+
 import sqlite3
 
 from app.connectors.Jira_API_connector import (

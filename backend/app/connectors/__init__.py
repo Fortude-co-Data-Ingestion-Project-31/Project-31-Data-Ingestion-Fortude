@@ -1,6 +1,4 @@
-"""Connectors package for reading data sources.
+# backend/app/connectors/__init__.py
+from . import config_db
 
-Place connector implementations here (local folder, SharePoint, etc.).
-"""
-
-__all__ = ["local_folder_connector", "sharepoint_connector"]
+__all__ = ['config_db']
