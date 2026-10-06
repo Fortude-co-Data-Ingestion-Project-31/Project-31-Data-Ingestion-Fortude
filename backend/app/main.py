@@ -1,4 +1,4 @@
-sys.path.append(".")
+
 import asyncio
 import json
 import logging
@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, model_validator
 from typing import Literal
 import re
-
+sys.path.append(".")
 from .connectors.Infor_API_connector import (
     fetch_order_lines,
     router as infor_router,
