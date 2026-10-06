@@ -12,7 +12,8 @@ from unittest.mock import patch, AsyncMock
 from types import SimpleNamespace
 from fastapi import HTTPException
 with patch("dotenv.load_dotenv", return_value=False):
-    from app import main, connector_config
+    from backend.app import main
+    from app import connector_config
     from app.connectors import Infor_API_connector as connector
     assert connector_config.INFOR_TENANT is None
     client = AsyncMock()
@@ -33,8 +34,16 @@ with patch("dotenv.load_dotenv", return_value=False):
     client.post.assert_not_called()
     client.get.assert_not_called()
 '''
-    env = {key: value for key, value in os.environ.items() if not key.startswith('INFOR_')}
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith("INFOR_")
+    }
+    repo_root = Path(__file__).resolve().parents[2]
+    env["PYTHONPATH"] = os.pathsep.join(
+        [str(repo_root), str(repo_root / "Backend"), env.get("PYTHONPATH", "")]
+    )
     completed = subprocess.run([sys.executable, '-c', script],
-                               cwd=Path(__file__).parents[1], env=env,
+                               cwd=repo_root / "Backend", env=env,
                                capture_output=True, text=True)
     assert completed.returncode == 0, completed.stderr
