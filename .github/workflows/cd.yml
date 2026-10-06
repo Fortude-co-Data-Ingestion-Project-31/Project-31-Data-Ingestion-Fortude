@@ -45,10 +45,10 @@ jobs:
           # This is a quick sanity check that the Python service still imports.
           python -m compileall backend/app
 
-      - name: Set up Node.js 20
+      - name: Set up Node.js 22
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
 
       - name: Build frontend application
         working-directory: frontend
