@@ -41,9 +41,9 @@ with patch("dotenv.load_dotenv", return_value=False):
     }
     repo_root = Path(__file__).resolve().parents[2]
     env["PYTHONPATH"] = os.pathsep.join(
-        [str(repo_root), str(repo_root / "Backend"), env.get("PYTHONPATH", "")]
+        [str(repo_root), str(repo_root / "backend"), env.get("PYTHONPATH", "")]
     )
     completed = subprocess.run([sys.executable, '-c', script],
-                               cwd=repo_root / "Backend", env=env,
+                               cwd=repo_root / "backend", env=env,
                                capture_output=True, text=True)
     assert completed.returncode == 0, completed.stderr
