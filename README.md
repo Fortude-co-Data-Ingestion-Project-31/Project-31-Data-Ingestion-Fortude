@@ -49,11 +49,12 @@ manually with **Actions → CI/CD → Run workflow**.
 
 The workflow checks both parts of the application:
 
-- **Backend:** installs `requirements.txt` using Python 3.10 and runs pytest
-  from `Backend/tests` and `tests/backend`. The capital `B` in `Backend/` is
-  intentional because the repository has separate `Backend/` and `backend/`
-  directories. Tests requiring live services or a locally running API are
-  left out of the CI gate.
+- **Backend:** installs `requirements.txt` using Python 3.10 and runs the
+  legacy suite from `Backend/tests` separately from the current suite in
+  `tests/backend`. The separate runs are necessary because this repository
+  contains both `Backend/app` and `backend/app`, each imported under `app`
+  within its own test context. Tests requiring live services or a locally
+  running API are left out of the CI gate.
 - **Frontend:** uses Node.js 22, installs the exact versions in
   `Frontend/package-lock.json`, runs the Vitest suite, and creates a production
   build with Vite.

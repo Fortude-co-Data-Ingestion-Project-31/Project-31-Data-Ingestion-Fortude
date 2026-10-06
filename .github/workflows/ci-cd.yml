@@ -26,10 +26,6 @@ jobs:
   backend-tests:
     name: Backend tests
     runs-on: ubuntu-latest
-    env:
-      # The repo has a legacy Backend/app package and a newer backend/app
-      # package. Keep both importable for their respective tests.
-      PYTHONPATH: Backend:backend:.
     steps:
       # Pin the runtime to the version documented for local backend development.
       - name: Check out source
@@ -49,16 +45,27 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
 
-      # Run from the repository root because the legacy test folder is named
-      # Backend/ (capital B) while the current application package is backend/.
-      # Exclude tests that require live services or a locally running API.
-      - name: Run backend tests
+      # The legacy suite imports `app.*` from Backend/app. Run it from its
+      # project directory, adding the repository root for tests that also
+      # import the newer package by its explicit `backend.app` name.
+      - name: Run legacy backend tests
+        working-directory: Backend
+        env:
+          PYTHONPATH: ..
         run: >-
-          python -m pytest Backend/tests tests/backend -q
-          --ignore=Backend/tests/mongo_db_test
-          --ignore=Backend/tests/test_requests.py
-          --ignore=Backend/tests/testFile.py
+          python -m pytest tests -q
+          --ignore=tests/mongo_db_test
+          --ignore=tests/test_requests.py
+          --ignore=tests/testFile.py
           -m "not integration"
+
+      # The newer SharePoint suite imports `connectors.*` from backend/app and
+      # must run with that app directory on the import path, independently of
+      # the legacy `Backend/app` package above.
+      - name: Run current backend tests
+        env:
+          PYTHONPATH: backend:.
+        run: python -m pytest tests/backend -q -m "not integration"
 
       # A source artifact is useful for a future backend deployment job. Limit
       # publication to main/manual runs; PRs only need a pass/fail result.
