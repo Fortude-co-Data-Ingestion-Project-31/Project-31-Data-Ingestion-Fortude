@@ -1,6 +1,6 @@
 import unittest
 
-from app.rules.rule_handlers import apply_selected_rules
+from backend.app.rules.rule_handlers import apply_selected_rules
 
 
 class RuleHandlerTests(unittest.TestCase):

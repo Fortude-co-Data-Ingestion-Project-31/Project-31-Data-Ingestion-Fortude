@@ -3,7 +3,7 @@ import json
 
 from fastapi import BackgroundTasks, Request
 
-from app import main
+from backend.app import main
 from app.connectors import config_db
 
 

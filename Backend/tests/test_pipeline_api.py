@@ -1,7 +1,7 @@
 from contextlib import asynccontextmanager
 
 import pytest
-from app import main
+from backend.app import main
 from app.connectors import config_db
 from fastapi.testclient import TestClient
 

@@ -57,12 +57,39 @@ jobs:
           --ignore=tests/mongo_db_test
           --ignore=tests/test_requests.py
           --ignore=tests/testFile.py
+          --ignore=tests/test_auth.py
+          --ignore=tests/test_infor_ingestion.py
+          --ignore=tests/test_kafka_output.py
+          --ignore=tests/test_main_ingestion.py
+          --ignore=tests/test_pipeline.py
+          --ignore=tests/test_pipeline_api.py
+          --ignore=tests/test_rule_handlers.py
+          --ignore=tests/test_sharepoint_connector.py
           -m "not integration"
 
-      # The newer SharePoint suite imports `connectors.*` from backend/app and
-      # must run with that app directory on the import path, independently of
-      # the legacy `Backend/app` package above.
-      - name: Run current backend tests
+      # These maintained tests live alongside the legacy suite but target the
+      # newer lowercase backend/app package. Run them from the repository root
+      # with both package roots available for their shared legacy modules.
+      - name: Run current application tests
+        env:
+          # The app imports a few shared legacy modules from Backend/app while
+          # the migrated modules live in backend/app; list both package roots.
+          PYTHONPATH: Backend:backend:.
+        run: >-
+          python -m pytest
+          Backend/tests/test_auth.py
+          Backend/tests/test_infor_ingestion.py
+          Backend/tests/test_kafka_output.py
+          Backend/tests/test_main_ingestion.py
+          Backend/tests/test_pipeline.py
+          Backend/tests/test_pipeline_api.py
+          Backend/tests/test_rule_handlers.py
+          Backend/tests/test_sharepoint_connector.py
+          -q
+          -m "not integration"
+
+      # The root-level SharePoint tests use the app-folder import layout.
+      - name: Run root-level backend tests
         env:
           PYTHONPATH: backend:.
         run: python -m pytest tests/backend -q -m "not integration"

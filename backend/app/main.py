@@ -22,7 +22,7 @@ from app.connectors.Infor_API_connector import (
 from app.mappers.infor_mapper import map_infor_response
 
 
-from app import auth
+from . import auth
 from app.connectors.config_db import (
     PipelineDuplicateNameError,
     add_connector,
@@ -48,16 +48,16 @@ from app.connectors.config_db import (
     save_sharepoint_sync_state,
     update_pipeline,
 )
-from app.connectors.local_folder_connector import read_local_text_files
-from app.connectors.sharepoint_connector import (
+from .connectors.local_folder_connector import read_local_text_files
+from .connectors.sharepoint_connector import (
     SharePointDeltaStateError,
     get_sharepoint_drive_id,
     read_sharepoint_delta,
 )
-from app.mappers.local_file_mapper import map_local_files_to_canonical
+from .mappers.local_file_mapper import map_local_files_to_canonical
 from app.outputs.MongoDB.mongo_db_common_func import persist
 from app.outputs.MongoDB.source_registration_table import SOURCES
-from app.rules.rule_handlers import apply_selected_rules
+from .rules.rule_handlers import apply_selected_rules
 from fastapi import BackgroundTasks, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, StrictInt

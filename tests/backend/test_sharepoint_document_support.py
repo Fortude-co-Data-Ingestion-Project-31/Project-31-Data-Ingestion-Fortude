@@ -1,17 +1,15 @@
 from io import BytesIO
-from pathlib import Path
-import sys
 from unittest.mock import Mock
 
 import pytest
 
 
-APP_FOLDER = Path(__file__).resolve().parents[2] / "backend" / "app"
-sys.path.insert(0, str(APP_FOLDER))
-
-from connectors.sharepoint_connector import _extract_document, _get_view_count
-from mappers.document_chunker import create_document_chunks, split_text
-from rules.rule_handlers import apply_selected_rules
+from backend.app.connectors.sharepoint_connector import (
+    _extract_document,
+    _get_view_count,
+)
+from backend.app.mappers.document_chunker import create_document_chunks, split_text
+from backend.app.rules.rule_handlers import apply_selected_rules
 
 
 def test_pptx_extracts_slide_text_and_number():

@@ -50,11 +50,11 @@ manually with **Actions → CI/CD → Run workflow**.
 The workflow checks both parts of the application:
 
 - **Backend:** installs `requirements.txt` using Python 3.10 and runs the
-  legacy suite from `Backend/tests` separately from the current suite in
-  `tests/backend`. The separate runs are necessary because this repository
-  contains both `Backend/app` and `backend/app`, each imported under `app`
-  within its own test context. Tests requiring live services or a locally
-  running API are left out of the CI gate.
+  legacy-only tests from `Backend/tests`, the migrated tests there against
+  `backend.app`, and the root-level tests in `tests/backend` as separate
+  suites. The repository contains case-distinct `Backend/app` and `backend/app`
+  packages, so each suite sets its own import path. Tests requiring live
+  services or a locally running API are left out of the CI gate.
 - **Frontend:** uses Node.js 22, installs the exact versions in
   `Frontend/package-lock.json`, runs the Vitest suite, and creates a production
   build with Vite.
