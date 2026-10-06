@@ -53,7 +53,7 @@ jobs:
         env:
           PYTHONPATH: ..
         run: >-
-          python -m pytest tests -q
+          python -m pytest ../tests -q
           --ignore=tests/mongo_db_test
           --ignore=tests/test_requests.py
           --ignore=tests/testFile.py
