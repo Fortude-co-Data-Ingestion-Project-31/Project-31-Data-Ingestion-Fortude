@@ -15,7 +15,7 @@ from pydantic import BaseModel, model_validator
 from typing import Literal
 import re
 sys.path.append(".")
-from .connectors.Infor_API_connector import (
+from app.connectors.Infor_API_connector import (
     fetch_order_lines,
     router as infor_router,
     setting as infor_setting,
