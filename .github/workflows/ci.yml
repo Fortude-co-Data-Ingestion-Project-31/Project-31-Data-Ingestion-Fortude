@@ -42,7 +42,7 @@ jobs:
         working-directory: backend
         run: |
           # Skip integration tests that depend on external services in CI.
-          pytest -q -m "not integration" -c pytest.ini
+           pytest -q -m "not integration" --ignore=tests/mongo_db_test -c pytest.ini
 
   frontend-build:
     name: Frontend build and tests
