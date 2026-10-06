@@ -41,6 +41,7 @@ from app.mappers.infor_mapper import map_infor_response
 def test_ingests_order_and_records_actual_output(
     monkeypatch, tmp_path, order_type, record
 ):
+    monkeypatch.setenv("INFOR_TENANT", "test_tenant")
     async def fetch(kind, number, request):
         assert (kind, number) == (order_type, "123")
         return {
@@ -289,7 +290,10 @@ def test_http_validation_and_registered_raw_route(monkeypatch):
         "INFOR_BASE_URL",
         "https://infor.test/m3",
     )
-
+    monkeypatch.setenv(
+        "INFOR_TENANT",
+        "test_tenant",
+    )
     monkeypatch.setattr(
         main.app.state,
         "client",
