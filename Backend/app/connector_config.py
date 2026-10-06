@@ -18,11 +18,11 @@ def required_setting(name: str) -> str:
         raise RuntimeError(f"Missing required environment setting: {name}")
     return value
 
-# Infor M3
-INFOR_TENANT = required_setting("INFOR_TENANT")
-INFOR_CLIENT_ID = required_setting("INFOR_CLIENT_ID")
-INFOR_CLIENT_SECRET = required_setting("INFOR_CLIENT_SECRET")
-INFOR_USERNAME = required_setting("INFOR_USERNAME")
-INFOR_PASSWORD = required_setting("INFOR_PASSWORD")
-INFOR_TOKEN_URL = required_setting("INFOR_TOKEN_URL")
-INFOR_BASE_URL = required_setting("INFOR_BASE_URL")
+# Infor is optional at startup. The connector validates settings when requested.
+INFOR_TENANT = os.getenv("INFOR_TENANT")
+INFOR_CLIENT_ID = os.getenv("INFOR_CLIENT_ID")
+INFOR_CLIENT_SECRET = os.getenv("INFOR_CLIENT_SECRET")
+INFOR_USERNAME = os.getenv("INFOR_USERNAME")
+INFOR_PASSWORD = os.getenv("INFOR_PASSWORD")
+INFOR_TOKEN_URL = os.getenv("INFOR_TOKEN_URL")
+INFOR_BASE_URL = os.getenv("INFOR_BASE_URL")

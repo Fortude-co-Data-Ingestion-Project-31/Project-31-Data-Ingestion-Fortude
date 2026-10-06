@@ -14,7 +14,11 @@ from pydantic import BaseModel, model_validator
 from typing import Literal
 import re
 
-from app.connectors.Infor_API_connector import fetch_order_lines, router as infor_router
+from app.connectors.Infor_API_connector import (
+    fetch_order_lines,
+    router as infor_router,
+    setting as infor_setting,
+)
 from app.mappers.infor_mapper import map_infor_response
 
 
@@ -370,13 +374,14 @@ async def ingest_local_folder(
         if request.order_type is None or request.order_number is None:
             raise HTTPException(422, "Infor requires an order type and order number.")
         rule = request.rule or "Default Rule"
+        tenant = infor_setting("INFOR_TENANT")
         raw_data = await fetch_order_lines(
             request.order_type, request.order_number, http_request
         )
         documents = map_infor_response(
             raw_data,
             request.order_type,
-            connector_config.INFOR_TENANT,
+            tenant,
             request.order_number,
         )
         documents = [apply_selected_rules(document, rule) for document in documents]

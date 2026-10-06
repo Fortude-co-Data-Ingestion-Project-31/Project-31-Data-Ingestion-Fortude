@@ -1,6 +1,5 @@
-from fastapi import FastAPI, Request, APIRouter, Query
 from app import connector_config
-from fastapi import FastAPI, Request, APIRouter, HTTPException
+from fastapi import Request, APIRouter, HTTPException, Query
 import os
 import httpx
 from dotenv import load_dotenv
@@ -28,6 +27,8 @@ async def get_inventory_by_order(
     Optional line and stock transaction type fields narrow the request.
     This endpoint is not a complete inventory export.
     """
+    # Validate configuration before sending any network requests.
+    base_url = setting("INFOR_BASE_URL").rstrip("/")
     client = request.app.state.client
     token = await get_infor_token(client)
 
@@ -45,7 +46,7 @@ async def get_inventory_by_order(
             params[field] = value
 
     response = await client.get(
-        f"{connector_config.INFOR_BASE_URL.rstrip('/')}/MMS060MI/LstBalIDByOrd",
+        f"{base_url}/MMS060MI/LstBalIDByOrd",
         headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
         params=params,
     )
@@ -98,6 +99,8 @@ async def get_purchase_order_lines(puno: str, request: Request):
     puno is the purchase order number. Use the app's shared HTTP client and
     an access token to request its lines from Infor.
     """
+    # Validate configuration before sending any network requests.
+    base_url = setting("INFOR_BASE_URL").rstrip("/")
     client = request.app.state.client
     token = await get_infor_token(client)
 
@@ -107,7 +110,7 @@ async def get_purchase_order_lines(puno: str, request: Request):
     
     }
 
-    url = f"{setting('INFOR_BASE_URL').rstrip('/')}/PPS200MI/LstLine"
+    url = f"{base_url}/PPS200MI/LstLine"
 
     response = await client.get(
         url,
@@ -126,6 +129,8 @@ async def get_customer_order_lines(orno: str, request: Request):
 
     orno is the customer order number.
     """
+    # Validate configuration before sending any network requests.
+    base_url = setting("INFOR_BASE_URL").rstrip("/")
     client = request.app.state.client
     token = await get_infor_token(client)
 
@@ -134,7 +139,7 @@ async def get_customer_order_lines(orno: str, request: Request):
         "Accept": "application/json"
     }
 
-    url = f"{setting('INFOR_BASE_URL').rstrip('/')}/OIS100MI/LstLine"
+    url = f"{base_url}/OIS100MI/LstLine"
 
     response = await client.get(
         url,
