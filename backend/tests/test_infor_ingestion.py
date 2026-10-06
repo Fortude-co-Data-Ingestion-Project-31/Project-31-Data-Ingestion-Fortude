@@ -291,9 +291,15 @@ def test_http_validation_and_registered_raw_route(monkeypatch):
         "https://infor.test/m3",
     )
     monkeypatch.setenv(
-        "INFOR_TENANT",
-        "test_tenant",
-    )
+    "INFOR_TENANT",
+    "test_tenant",
+)
+    monkeypatch.setenv("INFOR_CLIENT_ID", "test_client")
+    monkeypatch.setenv("INFOR_CLIENT_SECRET", "test_secret")
+    monkeypatch.setenv("INFOR_USERNAME", "test_user")
+    monkeypatch.setenv("INFOR_PASSWORD", "test_password")
+    monkeypatch.setenv("INFOR_TOKEN_URL", "https://infor.test/token")
+
     monkeypatch.setattr(
         main.app.state,
         "client",
