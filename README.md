@@ -49,12 +49,14 @@ manually with **Actions → CI/CD → Run workflow**.
 
 The workflow checks both parts of the application:
 
-- **Backend:** installs `requirements.txt` using Python 3.10 and runs pytest.
-  Tests requiring live Jira/Mongo services or a locally running API are left
-  out of the CI gate; deterministic unit and mocked integration tests still
-  run.
-- **Frontend:** installs the exact versions in `Frontend/package-lock.json`,
-  runs the Vitest suite, and creates a production build with Vite.
+- **Backend:** installs `requirements.txt` using Python 3.10 and runs pytest
+  from `Backend/tests` and `tests/backend`. The capital `B` in `Backend/` is
+  intentional because the repository has separate `Backend/` and `backend/`
+  directories. Tests requiring live services or a locally running API are
+  left out of the CI gate.
+- **Frontend:** uses Node.js 22, installs the exact versions in
+  `Frontend/package-lock.json`, runs the Vitest suite, and creates a production
+  build with Vite.
 
 Successful pushes to `main` and manual runs upload two downloadable artifacts:
 `backend-source-<commit-sha>` (the backend application source and dependency

@@ -27,9 +27,9 @@ jobs:
     name: Backend tests
     runs-on: ubuntu-latest
     env:
-      # Tests import modules both as `backend.app` and as `app`; expose the
-      # repository root and backend directory while running from backend/.
-      PYTHONPATH: ..:.
+      # The repo has a legacy Backend/app package and a newer backend/app
+      # package. Keep both importable for their respective tests.
+      PYTHONPATH: Backend:backend:.
     steps:
       # Pin the runtime to the version documented for local backend development.
       - name: Check out source
@@ -49,16 +49,15 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
 
-      # Exclude tests that need live Jira/Mongo services or a locally running
-      # API. Keep deterministic unit and mocked integration tests in the gate.
-      # `-m "not integration"` also excludes tests explicitly marked as external.
+      # Run from the repository root because the legacy test folder is named
+      # Backend/ (capital B) while the current application package is backend/.
+      # Exclude tests that require live services or a locally running API.
       - name: Run backend tests
-        working-directory: backend
         run: >-
-          python -m pytest tests ../tests/backend -q
-          --ignore=tests/mongo_db_test
-          --ignore=tests/test_requests.py
-          --ignore=tests/testFile.py
+          python -m pytest Backend/tests tests/backend -q
+          --ignore=Backend/tests/mongo_db_test
+          --ignore=Backend/tests/test_requests.py
+          --ignore=Backend/tests/testFile.py
           -m "not integration"
 
       # A source artifact is useful for a future backend deployment job. Limit
@@ -69,6 +68,7 @@ jobs:
         with:
           name: backend-source-${{ github.sha }}
           path: |
+            Backend/app/
             backend/app/
             requirements.txt
           if-no-files-found: error
@@ -89,7 +89,8 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          # jest-dom 7 requires Node.js 22 or newer; use 22 for all frontend CI.
+          node-version: "22"
           # npm ci is paired with this cache so dependency downloads can be
           # reused without ever changing the committed package lockfile.
           cache: npm

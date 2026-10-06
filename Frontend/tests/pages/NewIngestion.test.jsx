@@ -16,9 +16,9 @@ import { useState } from "react";
 import NewIngestion from "../../src/pages/NewIngestion";
 
 const CONFIG = {
-  connectors: [{ id: 1, name: "Infor Sales" }],
-  rules: [{ id: 1, name: "Infor Sales Rules" }],
-  outputs: [{ id: 1, name: "PostgreSQL" }],
+  connectors: [{ id: 1, name: "SharePoint KB" }],
+  rules: [{ id: 1, name: "Knowledge Base Rules" }],
+  outputs: [{ id: 1, name: "MongoDB" }],
 };
 
 // `NewIngestion` expects its `form` state to be lifted up by the parent
@@ -38,12 +38,12 @@ describe("NewIngestion", () => {
     const startButton = screen.getByRole("button", { name: "Start" });
     expect(startButton).toBeDisabled();
 
-    await user.selectOptions(screen.getByLabelText("Select Connector"), "Infor Sales");
+    await user.selectOptions(screen.getByLabelText("Select Connector"), "SharePoint KB");
     await user.selectOptions(screen.getByLabelText("Select Mapper"), "Standard Field Mapper");
-    await user.selectOptions(screen.getByLabelText("Select Rules"), "Infor Sales Rules");
+    await user.selectOptions(screen.getByLabelText("Select Rules"), "Knowledge Base Rules");
     expect(startButton).toBeDisabled(); // outputs still unset
 
-    await user.selectOptions(screen.getByLabelText("Select Outputs"), "PostgreSQL");
+    await user.selectOptions(screen.getByLabelText("Select Outputs"), "MongoDB");
     expect(startButton).toBeEnabled();
   });
 
@@ -56,15 +56,15 @@ describe("NewIngestion", () => {
 
     render(<Wrapper onStart={onStart} />);
 
-    await user.selectOptions(screen.getByLabelText("Select Connector"), "Infor Sales");
+    await user.selectOptions(screen.getByLabelText("Select Connector"), "SharePoint KB");
     await user.selectOptions(screen.getByLabelText("Select Mapper"), "Standard Field Mapper");
-    await user.selectOptions(screen.getByLabelText("Select Rules"), "Infor Sales Rules");
-    await user.selectOptions(screen.getByLabelText("Select Outputs"), "PostgreSQL");
+    await user.selectOptions(screen.getByLabelText("Select Rules"), "Knowledge Base Rules");
+    await user.selectOptions(screen.getByLabelText("Select Outputs"), "MongoDB");
 
     await user.click(screen.getByRole("button", { name: "Start" }));
 
     expect(screen.getByText(/running ingestion/i)).toBeInTheDocument();
-    expect(screen.getByText("Infor Sales")).toBeInTheDocument();
+    expect(screen.getByText("SharePoint KB")).toBeInTheDocument();
     expect(onStart).toHaveBeenCalledTimes(1);
   });
 
@@ -79,10 +79,10 @@ describe("NewIngestion", () => {
 
     render(<Wrapper onStart={onStart} />);
 
-    await user.selectOptions(screen.getByLabelText("Select Connector"), "Infor Sales");
+    await user.selectOptions(screen.getByLabelText("Select Connector"), "SharePoint KB");
     await user.selectOptions(screen.getByLabelText("Select Mapper"), "Standard Field Mapper");
-    await user.selectOptions(screen.getByLabelText("Select Rules"), "Infor Sales Rules");
-    await user.selectOptions(screen.getByLabelText("Select Outputs"), "PostgreSQL");
+    await user.selectOptions(screen.getByLabelText("Select Rules"), "Knowledge Base Rules");
+    await user.selectOptions(screen.getByLabelText("Select Outputs"), "MongoDB");
     await user.click(screen.getByRole("button", { name: "Start" }));
 
     expect(await screen.findByText("Ingestion could not complete")).toBeInTheDocument();
@@ -99,10 +99,10 @@ describe("NewIngestion", () => {
 
     render(<Wrapper onStart={onStart} />);
 
-    await user.selectOptions(screen.getByLabelText("Select Connector"), "Infor Sales");
+    await user.selectOptions(screen.getByLabelText("Select Connector"), "SharePoint KB");
     await user.selectOptions(screen.getByLabelText("Select Mapper"), "Standard Field Mapper");
-    await user.selectOptions(screen.getByLabelText("Select Rules"), "Infor Sales Rules");
-    await user.selectOptions(screen.getByLabelText("Select Outputs"), "PostgreSQL");
+    await user.selectOptions(screen.getByLabelText("Select Rules"), "Knowledge Base Rules");
+    await user.selectOptions(screen.getByLabelText("Select Outputs"), "MongoDB");
     await user.click(screen.getByRole("button", { name: "Start" }));
 
     await user.click(await screen.findByRole("button", { name: /go back & retry/i }));

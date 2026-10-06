@@ -33,6 +33,8 @@ class FakeSession:
             return FakeResponse({"id": "root-id"})
         if url.endswith("/items/txt-id/content"):
             return FakeResponse(content=b"hello")
+        if url.endswith("/analytics"):
+            return FakeResponse({"allTime": {"access": {"actionCount": 0}}})
         if url in self.delta_pages:
             return FakeResponse(self.delta_pages[url])
         raise AssertionError(f"Unexpected URL: {url}")
