@@ -6,7 +6,7 @@ import pytest
 from fastapi import BackgroundTasks, HTTPException, Request, FastAPI
 from pydantic import ValidationError
 
-from backend.app import main
+from app import main
 from app.connectors import Infor_API_connector as infor
 from app.mappers.infor_mapper import map_infor_response
 
