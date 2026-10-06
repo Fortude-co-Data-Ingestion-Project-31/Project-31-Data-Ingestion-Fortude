@@ -17,7 +17,7 @@ permissions:
 
 jobs:
   backend-tests:
-    name: Backend validation
+    name: backend validation
     runs-on: ubuntu-latest
 
     steps:
