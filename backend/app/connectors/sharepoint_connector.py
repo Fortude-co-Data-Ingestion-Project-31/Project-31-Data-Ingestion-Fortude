@@ -200,6 +200,7 @@ def _download_file_record(session, drive_id, headers, item):
     content, content_units = _extract_document(file_name, download_response.content)
     return {
         "source": "sharepoint",
+        "item_id": item.get("id"),
         "file_name": file_name,
         "file_type": file_type,
         "file_size": item.get("size"),

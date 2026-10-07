@@ -196,4 +196,10 @@ SOURCES: dict[str, SourceSpec] = {
             "rule_results.d07_client_health_score",
         ],
     ),
+    "sharepoint": SourceSpec(
+        source="sharepoint",
+        collection="sharepoint_documents",
+        # SharePoint canonical documents already use document_id as their identity.
+        identity="document_id",
+    ),
 }

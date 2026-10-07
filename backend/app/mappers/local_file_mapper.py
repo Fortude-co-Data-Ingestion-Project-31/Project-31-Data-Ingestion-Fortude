@@ -13,7 +13,11 @@ def map_local_file_to_canonical(raw_file):
 
     canonical_document = {
         "source": raw_file.get("source", "local_folder"),
-        "document_id": file_name,
+        "document_id": (
+            raw_file.get("item_id") or file_name
+            if raw_file.get("source") == "sharepoint"
+            else file_name
+        ),
         "title": Path(file_name).stem,
         "file_name": file_name,
         "file_type": raw_file.get("file_type"),

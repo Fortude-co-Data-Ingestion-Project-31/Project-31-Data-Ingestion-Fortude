@@ -177,75 +177,113 @@ def read_item(item_id: int, q: str | None = None):
     return {"item_id": item_id, "q": q}
 
 
-def run_sharepoint_ingestion(rule):
-    """Synchronize SharePoint changes for both manual and automatic triggers."""
-    with ingestion_lock:
-        OUTPUT_FOLDER.mkdir(parents=True, exist_ok=True)
+def _process_sharepoint_ingestion(rule, save_state=True):
+    """Synchronize SharePoint changes and return accepted canonical documents."""
+    OUTPUT_FOLDER.mkdir(parents=True, exist_ok=True)
 
-        drive_id = get_sharepoint_drive_id()
-        previous_delta_link = get_sharepoint_delta_link(drive_id)
-        try:
-            delta_result = read_sharepoint_delta(previous_delta_link)
-        except SharePointDeltaStateError:
-            clear_sharepoint_delta_link(drive_id)
-            previous_delta_link = None
-            delta_result = read_sharepoint_delta()
+    drive_id = get_sharepoint_drive_id()
+    previous_delta_link = get_sharepoint_delta_link(drive_id)
+    try:
+        delta_result = read_sharepoint_delta(previous_delta_link)
+    except SharePointDeltaStateError:
+        clear_sharepoint_delta_link(drive_id)
+        previous_delta_link = None
+        delta_result = read_sharepoint_delta()
 
-        mappings = get_sharepoint_item_mappings(drive_id)
-        mapping_upserts = {}
-        mapping_deletes = set()
-        processed = 0
-        seen_item_ids = set()
+    mappings = get_sharepoint_item_mappings(drive_id)
+    mapping_upserts = {}
+    mapping_deletes = set()
+    processed = 0
+    seen_item_ids = set()
+    documents_to_persist = []
 
-        for change in delta_result["changes"]:
-            item_id = change["item_id"]
-            seen_item_ids.add(item_id)
-            previous_output_name = mappings.get(item_id)
+    for change in delta_result["changes"]:
+        item_id = change["item_id"]
+        seen_item_ids.add(item_id)
+        previous_output_name = mappings.get(item_id)
 
-            if change["deleted"] or not change["supported"]:
-                if previous_output_name:
-                    (OUTPUT_FOLDER / previous_output_name).unlink(missing_ok=True)
-                    mapping_deletes.add(item_id)
-                continue
-
-            document = map_local_files_to_canonical([change["record"]])[0]
-            document = apply_selected_rules(document, rule)
-            output_name = Path(document["file_name"]).with_suffix(".json").name
-            if previous_output_name and previous_output_name != output_name:
+        if change["deleted"] or not change["supported"]:
+            if previous_output_name:
                 (OUTPUT_FOLDER / previous_output_name).unlink(missing_ok=True)
-            (OUTPUT_FOLDER / output_name).write_text(
-                json.dumps(document, indent=2, ensure_ascii=False),
-                encoding="utf-8",
-            )
-            mapping_upserts[item_id] = output_name
-            processed += 1
+                mapping_deletes.add(item_id)
+            continue
 
-        # A fresh enumeration is authoritative, so remove stale tracked items.
-        if previous_delta_link is None:
-            for item_id, output_name in mappings.items():
-                if item_id not in seen_item_ids:
-                    (OUTPUT_FOLDER / output_name).unlink(missing_ok=True)
-                    mapping_deletes.add(item_id)
-
-        save_sharepoint_sync_state(
-            drive_id,
-            delta_result["delta_link"],
-            mapping_upserts,
-            mapping_deletes,
+        document = map_local_files_to_canonical([change["record"]])[0]
+        document = apply_selected_rules(document, rule)
+        output_name = Path(document["file_name"]).with_suffix(".json").name
+        if previous_output_name and previous_output_name != output_name:
+            (OUTPUT_FOLDER / previous_output_name).unlink(missing_ok=True)
+        (OUTPUT_FOLDER / output_name).write_text(
+            json.dumps(document, indent=2, ensure_ascii=False),
+            encoding="utf-8",
         )
+        mapping_upserts[item_id] = output_name
+        processed += 1
+        # Keep sensitive documents in existing outputs, but never send them to Mongo.
+        if document.get("kb_status") != "rejected_sensitive":
+            documents_to_persist.append(document)
 
-        return {
-            "status": "success",
-            "processed": processed,
-            "rule": rule,
-        }
+    # A fresh enumeration is authoritative, so remove stale tracked items.
+    if previous_delta_link is None:
+        for item_id, output_name in mappings.items():
+            if item_id not in seen_item_ids:
+                (OUTPUT_FOLDER / output_name).unlink(missing_ok=True)
+                mapping_deletes.add(item_id)
+
+    sync_state = (
+        drive_id,
+        delta_result["delta_link"],
+        mapping_upserts,
+        mapping_deletes,
+    )
+    if save_state:
+        save_sharepoint_sync_state(*sync_state)
+
+    result = {
+        "status": "success",
+        "processed": processed,
+        "rule": rule,
+    }
+    return result, documents_to_persist, sync_state
+
+
+def run_sharepoint_ingestion(rule):
+    """Synchronize SharePoint changes and preserve the existing result shape."""
+    with ingestion_lock:
+        result, _, _ = _process_sharepoint_ingestion(rule)
+    return result
+
+
+def _mongodb_selected(outputs):
+    """Return whether MongoDB was explicitly selected as an output."""
+    return any(
+        output.strip().casefold() == "mongodb"
+        for output in (outputs or "").split(",")
+    )
+
+
+async def _run_sharepoint_mongodb_ingestion(rule):
+    """Persist accepted SharePoint documents before advancing sync state."""
+    while not ingestion_lock.acquire(blocking=False):
+        await asyncio.sleep(0.05)
+    try:
+        result, accepted_documents, sync_state = await asyncio.to_thread(
+            _process_sharepoint_ingestion, rule, False
+        )
+        if accepted_documents:
+            await persist("sharepoint", accepted_documents)
+        await asyncio.to_thread(save_sharepoint_sync_state, *sync_state)
+        return result
+    finally:
+        ingestion_lock.release()
 
 
 async def poll_sharepoint_ingestion():
+    """Poll SharePoint and persist accepted documents to MongoDB."""
     while True:
         await asyncio.sleep(POLL_INTERVAL_SECONDS)
         try:
-            await asyncio.to_thread(run_sharepoint_ingestion, SHAREPOINT_POLL_RULE)
+            await _run_sharepoint_mongodb_ingestion(SHAREPOINT_POLL_RULE)
         except asyncio.CancelledError:
             raise
         except Exception:
@@ -356,10 +394,11 @@ async def ingest_local_folder(
         }
 
     if "sharepoint" in connector_name:
-        result = await asyncio.to_thread(
-            run_sharepoint_ingestion,
-            request.rule or "Default Rule",
-        )
+        rule = request.rule or "Default Rule"
+        if _mongodb_selected(request.outputs):
+            result = await _run_sharepoint_mongodb_ingestion(rule)
+        else:
+            result = await asyncio.to_thread(run_sharepoint_ingestion, rule)
         add_history_entry(
             connector=request.connector,
             mapper=request.mapper or "",
