@@ -16,8 +16,8 @@ import { useState } from "react";
 import NewIngestion from "../../src/pages/NewIngestion";
 
 const CONFIG = {
-  connectors: [{ id: 1, name: "Infor Sales" }],
-  rules: [{ id: 1, name: "Infor Sales Rules" }],
+  connectors: [{ id: 1, name: "Jira Support" }],
+  rules: [{ id: 1, name: "Jira Support Rules" }],
   outputs: [{ id: 1, name: "PostgreSQL" }],
 };
 
@@ -38,9 +38,9 @@ describe("NewIngestion", () => {
     const startButton = screen.getByRole("button", { name: "Start" });
     expect(startButton).toBeDisabled();
 
-    await user.selectOptions(screen.getByLabelText("Select Connector"), "Infor Sales");
+    await user.selectOptions(screen.getByLabelText("Select Connector"), "Jira Support");
     await user.selectOptions(screen.getByLabelText("Select Mapper"), "Standard Field Mapper");
-    await user.selectOptions(screen.getByLabelText("Select Rules"), "Infor Sales Rules");
+    await user.selectOptions(screen.getByLabelText("Select Rules"), "Jira Support Rules");
     expect(startButton).toBeDisabled(); // outputs still unset
 
     await user.selectOptions(screen.getByLabelText("Select Outputs"), "PostgreSQL");
@@ -56,15 +56,15 @@ describe("NewIngestion", () => {
 
     render(<Wrapper onStart={onStart} />);
 
-    await user.selectOptions(screen.getByLabelText("Select Connector"), "Infor Sales");
+    await user.selectOptions(screen.getByLabelText("Select Connector"), "Jira Support");
     await user.selectOptions(screen.getByLabelText("Select Mapper"), "Standard Field Mapper");
-    await user.selectOptions(screen.getByLabelText("Select Rules"), "Infor Sales Rules");
+    await user.selectOptions(screen.getByLabelText("Select Rules"), "Jira Support Rules");
     await user.selectOptions(screen.getByLabelText("Select Outputs"), "PostgreSQL");
 
     await user.click(screen.getByRole("button", { name: "Start" }));
 
     expect(screen.getByText(/running ingestion/i)).toBeInTheDocument();
-    expect(screen.getByText("Infor Sales")).toBeInTheDocument();
+    expect(screen.getByText("Jira Support")).toBeInTheDocument();
     expect(onStart).toHaveBeenCalledTimes(1);
   });
 
@@ -79,9 +79,9 @@ describe("NewIngestion", () => {
 
     render(<Wrapper onStart={onStart} />);
 
-    await user.selectOptions(screen.getByLabelText("Select Connector"), "Infor Sales");
+    await user.selectOptions(screen.getByLabelText("Select Connector"), "Jira Support");
     await user.selectOptions(screen.getByLabelText("Select Mapper"), "Standard Field Mapper");
-    await user.selectOptions(screen.getByLabelText("Select Rules"), "Infor Sales Rules");
+    await user.selectOptions(screen.getByLabelText("Select Rules"), "Jira Support Rules");
     await user.selectOptions(screen.getByLabelText("Select Outputs"), "PostgreSQL");
     await user.click(screen.getByRole("button", { name: "Start" }));
 
@@ -99,9 +99,9 @@ describe("NewIngestion", () => {
 
     render(<Wrapper onStart={onStart} />);
 
-    await user.selectOptions(screen.getByLabelText("Select Connector"), "Infor Sales");
+    await user.selectOptions(screen.getByLabelText("Select Connector"), "Jira Support");
     await user.selectOptions(screen.getByLabelText("Select Mapper"), "Standard Field Mapper");
-    await user.selectOptions(screen.getByLabelText("Select Rules"), "Infor Sales Rules");
+    await user.selectOptions(screen.getByLabelText("Select Rules"), "Jira Support Rules");
     await user.selectOptions(screen.getByLabelText("Select Outputs"), "PostgreSQL");
     await user.click(screen.getByRole("button", { name: "Start" }));
 
