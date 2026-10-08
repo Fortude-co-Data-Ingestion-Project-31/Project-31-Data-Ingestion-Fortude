@@ -27,7 +27,7 @@ This system is composed of:
 - [Setup](documentation/setup.md)
 - [GIT Guidelines](documentation/git-guidelines.md)
 
-## Backend
+## backend
 
 - **Create and activate a virtual environment (recommended):**
 
@@ -109,7 +109,7 @@ A concise overview of the repository layout and the purpose of important folders
 - `documentation/`: Project docs and guides (`setup.md`, `auth_flow.md`, `git-guidelines.md`).
 
 - `tests/`: Unit and integration tests.
-	- `backend/`: Backend-focused pytest tests.
+	- `backend/`: backend-focused pytest tests.
 	- `frontend/`: Frontend test placeholders and UI tests.
 
 - Top-level files:

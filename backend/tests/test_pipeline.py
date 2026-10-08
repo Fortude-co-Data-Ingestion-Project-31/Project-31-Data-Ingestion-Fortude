@@ -2,7 +2,7 @@ import sqlite3
 
 import pytest
 
-from backend.app.connectors import config_db
+from app.connectors import config_db
 
 # Seed data:
 # connectors: ["Infor", "Jira", "SharePoint"]

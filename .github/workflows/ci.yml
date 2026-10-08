@@ -7,17 +7,19 @@ on:
     branches:
       - main
       - develop
+      - ci-cd-pipeline
   pull_request:
     branches:
       - main
       - develop
+      - ci-cd-pipeline
 
 permissions:
   contents: read
 
 jobs:
   backend-tests:
-    name: Backend validation
+    name: backend validation
     runs-on: ubuntu-latest
 
     steps:
@@ -40,7 +42,7 @@ jobs:
         working-directory: backend
         run: |
           # Skip integration tests that depend on external services in CI.
-          pytest -q -m "not integration"
+           pytest -q -m "not integration" --ignore=tests/mongo_db_test -c pytest.ini
 
   frontend-build:
     name: Frontend build and tests
@@ -50,10 +52,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Node.js 20
+      - name: Set up Node.js 22
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
