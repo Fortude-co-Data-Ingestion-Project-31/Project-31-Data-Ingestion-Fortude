@@ -1,0 +1,10 @@
+{
+  "client_id": "demo_client",
+  "policy_version": "demo-e01-v1",
+  "is_demo": true,
+  "description": "Student demonstration policy, not client-approved requirements.",
+  "required_fields": {
+    "purchase": ["order_number", "line_number", "item_code", "ordered_quantity"],
+    "customer": ["order_number", "line_number", "item_code", "ordered_quantity"]
+  }
+}

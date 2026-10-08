@@ -93,7 +93,7 @@ async def get_infor_token(client):
 
 
 @router.get("/purchase-orders/{puno}/lines")
-async def get_purchase_order_lines(puno: str, request: Request):
+async def get_purchase_order_lines(puno: str, request: Request, company: str | None = None):
     """Get the line items for a purchase order and return Infor's JSON response.
 
     puno is the purchase order number. Use the app's shared HTTP client and
@@ -115,7 +115,7 @@ async def get_purchase_order_lines(puno: str, request: Request):
     response = await client.get(
         url,
         headers=headers, 
-        params={"PUNO": puno}
+        params={"PUNO": puno, **({"cono": company} if company else {})}
 
     )
 
@@ -123,7 +123,7 @@ async def get_purchase_order_lines(puno: str, request: Request):
     return response.json()
 
 @router.get("/customer-orders/{orno}/lines")
-async def get_customer_order_lines(orno: str, request: Request):
+async def get_customer_order_lines(orno: str, request: Request, company: str | None = None):
     """
     Get the line items for a customer order and return Infor's JSON response.
 
@@ -144,7 +144,7 @@ async def get_customer_order_lines(orno: str, request: Request):
     response = await client.get(
         url,
         headers=headers,
-        params={"ORNO": orno}
+        params={"ORNO": orno, **({"cono": company} if company else {})}
     )
 
     response.raise_for_status()
@@ -153,20 +153,21 @@ async def get_customer_order_lines(orno: str, request: Request):
 async def fetch_order_lines(
     order_type: str,
     order_number: str,
-    request: Request
+    request: Request,
+    company: str | None = None,
 ):
     """
     Choose the purchase or customer order function for the ingestion process.
 
     Return the order lines, or turn connection problems and invalid responses
-    into clear API errors.
+    into clear API errors. Optional company selects the M3 company explicitly.
     """
     try:
         if order_type == "purchase":
-            return await get_purchase_order_lines(order_number, request)
+            return await get_purchase_order_lines(order_number, request, company)
 
         if order_type == "customer":
-            return await get_customer_order_lines(order_number, request)
+            return await get_customer_order_lines(order_number, request, company)
 
         raise HTTPException(
             status_code=422,
