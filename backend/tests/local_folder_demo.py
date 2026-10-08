@@ -1,8 +1,8 @@
 import json
 from pathlib import Path
 
-from backend.app.mappers.local_file_mapper import map_local_files_to_canonical
-from backend.app.connectors.local_folder_connector import read_local_text_files
+from app.mappers.local_file_mapper import map_local_files_to_canonical
+from app.connectors.local_folder_connector import read_local_text_files
 
 
 BASE_FOLDER = Path(__file__).resolve().parents[2]

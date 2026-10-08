@@ -27,19 +27,62 @@ This system is composed of:
 - [Setup](documentation/setup.md)
 - [GIT Guidelines](documentation/git-guidelines.md)
 
+## backend
+
+- **Create and activate a virtual environment (recommended):**
+
+	```bash
+	python -m venv .venv
+	source .venv/bin/activate
+	```
+
+- **Install Python dependencies:**
+
+	```bash
+	pip install -r requirements.txt
+	```
+
+- **Run the backend tests:**
+
+	```bash
+	cd backend
+	pytest -q -m "not integration"
+	```
+
 ## Frontend
 
 - **Install dependencies:**
 
 	```bash
+	cd frontend
 	npm install
 	```
 
 - **Run development server:**
 
 	```bash
+	cd frontend
 	npm run dev
 	```
+
+- **Run the frontend test suite and production build:**
+
+	```bash
+	cd frontend
+	npm test -- --run
+	npm run build
+	```
+
+## CI/CD pipeline
+
+This repository includes GitHub Actions workflows to keep the project healthy during development and deployment:
+
+- `.github/workflows/ci.yml` - Runs backend pytest checks and frontend build/test validation on pushes and pull requests.
+- `.github/workflows/cd.yml` - Builds release artifacts and provides a deployment job that can be connected to the target hosting platform.
+
+The CI workflow is intentionally configured to skip external integration tests by default, which reduces flaky failures caused by service dependencies such as Jira, MongoDB or SharePoint.
+
+For production deployment, update the placeholder deployment step in `.github/workflows/cd.yml` to use your real deployment tool (for example Azure App Service, Docker registry publishing, or SSH-based deployment).
 
 ## Folder structure
 
@@ -66,7 +109,7 @@ A concise overview of the repository layout and the purpose of important folders
 - `documentation/`: Project docs and guides (`setup.md`, `auth_flow.md`, `git-guidelines.md`).
 
 - `tests/`: Unit and integration tests.
-	- `backend/`: Backend-focused pytest tests.
+	- `backend/`: backend-focused pytest tests.
 	- `frontend/`: Frontend test placeholders and UI tests.
 
 - Top-level files:

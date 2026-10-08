@@ -6,6 +6,10 @@ import PageHeading from "../components/PageHeading";
 export default function EntryDetail({ entry, goTo }) {
   if (!entry) return null;
 
+  const outputs = Array.isArray(entry.outputs)
+    ? entry.outputs
+    : (entry.outputs || "").split(",").map((output) => output.trim()).filter(Boolean);
+
   const fields = [
     ["Connector", entry.connector],
     ["Mapper", entry.mapper || "<Mapper>"],
@@ -42,7 +46,7 @@ export default function EntryDetail({ entry, goTo }) {
           Outputs
         </div>
         <div className="flex flex-wrap gap-2.5">
-          {entry.outputs.map((o) => (
+          {outputs.map((o) => (
             <div key={o} className="text-sm px-4 py-2 rounded-full font-medium" style={{ background: COLORS.badgeBg, border: `1px solid ${COLORS.border}`, color: COLORS.text }}>
               {o}
             </div>
