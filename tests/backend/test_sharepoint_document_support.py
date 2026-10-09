@@ -9,8 +9,10 @@ import pytest
 APP_FOLDER = Path(__file__).resolve().parents[2] / "backend" / "app"
 sys.path.insert(0, str(APP_FOLDER))
 
+from connectors import sharepoint_connector
 from connectors.sharepoint_connector import _extract_document, _get_view_count
 from mappers.document_chunker import create_document_chunks, split_text
+from mappers.local_file_mapper import map_local_file_to_canonical
 from rules.rule_handlers import apply_selected_rules
 
 
@@ -153,3 +155,67 @@ def test_graph_analytics_failure_returns_none():
     session.get.return_value = response
 
     assert _get_view_count(session, "drive-1", "item-1", {}) is None
+
+
+def test_sharepoint_document_uses_stable_item_id():
+    document = map_local_file_to_canonical({
+        "source": "sharepoint",
+        "item_id": "graph-item-1",
+        "file_name": "guide.txt",
+        "content": "Guide",
+    })
+
+    assert document["document_id"] == "graph-item-1"
+
+
+def test_sharepoint_download_record_carries_item_id(monkeypatch):
+    response = Mock(content=b"Guide")
+    session = Mock()
+    session.get.return_value = response
+    monkeypatch.setattr(
+        sharepoint_connector,
+        "_extract_document",
+        lambda file_name, content: ("Guide", []),
+    )
+    monkeypatch.setattr(
+        sharepoint_connector,
+        "_get_view_count",
+        lambda session, drive_id, item_id, headers: None,
+    )
+
+    record = sharepoint_connector._download_file_record(
+        session,
+        "drive-1",
+        {},
+        {"id": "graph-item-1", "name": "guide.txt"},
+    )
+
+    assert record["item_id"] == "graph-item-1"
+
+
+def test_sharepoint_rename_keeps_document_id():
+    before = map_local_file_to_canonical({
+        "source": "sharepoint",
+        "item_id": "graph-item-1",
+        "file_name": "old-name.txt",
+        "content": "Guide",
+    })
+    after = map_local_file_to_canonical({
+        "source": "sharepoint",
+        "item_id": "graph-item-1",
+        "file_name": "new-name.txt",
+        "content": "Guide",
+    })
+
+    assert before["document_id"] == after["document_id"] == "graph-item-1"
+
+
+def test_non_sharepoint_mapper_ignores_item_id():
+    document = map_local_file_to_canonical({
+        "source": "local_folder",
+        "item_id": "unrelated-item-id",
+        "file_name": "local-guide.txt",
+        "content": "Guide",
+    })
+
+    assert document["document_id"] == "local-guide.txt"
