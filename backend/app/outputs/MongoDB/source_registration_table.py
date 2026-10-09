@@ -146,6 +146,11 @@ def _identity(doc, spec):
 # ---------------------------------------------------------------------------
 
 SOURCES: dict[str, SourceSpec] = {
+    # Stable IDs let repeat requests update the same demo order line.
+    "infor_demo": SourceSpec(
+        source="infor_demo", collection="infor_demo_records",
+        identity="document_id", indexes=["tenant", "company", "order_number"],
+    ),
     "jira": SourceSpec(
         source="jira",
         collection="jira_tickets",
