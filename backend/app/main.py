@@ -20,6 +20,7 @@ from app.connectors.Infor_API_connector import (
     setting as infor_setting,
 )
 from app.mappers.infor_mapper import map_infor_response
+from app.services.infor_mongo_demo import router as infor_mongo_router
 
 
 from app import auth
@@ -129,6 +130,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 app.include_router(infor_router)  # registering infor router
+app.include_router(infor_mongo_router)  # Demo ingestion and SQL result inspection.
 
 app.add_middleware(
     CORSMiddleware,
