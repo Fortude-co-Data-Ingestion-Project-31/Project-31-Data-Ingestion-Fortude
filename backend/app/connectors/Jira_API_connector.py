@@ -38,7 +38,7 @@ from app.connector_config import JIRA_BASE_URL, JIRA_EMAIL, JIRA_API_TOKEN
 # How far back the incremental poller looks. The poll runs every 5
 # minutes but fetches a 10-minute window, giving a 2x overlap so a
 # missed run does not create a gap.
-FREQUENTLY_UPDATED_RANGE_MINS = "10"
+FREQUENTLY_UPDATED_RANGE_MINS = 24 * 60  # 24 hours
 
 
 class JiraSearch(BaseModel):
