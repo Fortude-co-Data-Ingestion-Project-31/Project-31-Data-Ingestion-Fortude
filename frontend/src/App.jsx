@@ -292,7 +292,14 @@ export default function App() {
 
   const startIngestion = async (options = {}) => {
     try {
-      const response = await fetch(`${API_BASE}/api/ingest/local-folder`, {
+      // Route to the MongoDB endpoint when the user picked MongoDB as output,
+      // otherwise use the Local JSON endpoint.
+      const wantsMongo = (form.outputs || "").toLowerCase().includes("mongodb");
+      const endpoint = wantsMongo
+        ? `${API_BASE}/api/ingest/mongodb`
+        : `${API_BASE}/api/ingest/local-folder`;
+
+      const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -316,11 +323,14 @@ export default function App() {
 
       const data = await response.json();
 
-      // Refresh history from the backend so it persists across reloads
       await fetchHistory();
 
       if (data.message) {
         showToast(data.message);
+      } else if (wantsMongo) {
+        showToast(
+          `Saved to MongoDB — ${data.inserted} inserted, ${data.modified} updated`
+        );
       } else {
         showToast(
           `Ingestion complete - ${data.processed} document(s) processed`
@@ -337,7 +347,7 @@ export default function App() {
       }
       throw error;
     }
-  };
+    };
 
   const activeEntry = history.find((e) => e.id === activeEntryId) || history[0];
 

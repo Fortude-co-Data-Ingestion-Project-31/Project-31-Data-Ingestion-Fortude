@@ -21,6 +21,7 @@ from app.connectors.Infor_API_connector import (
 )
 from app.mappers.infor_mapper import map_infor_response
 from app.services.infor_mongo_demo import router as infor_mongo_router
+from app.outputs.MongoDB.mongo_db_output import init_mongo, close_mongo
 
 
 from app import auth
@@ -70,7 +71,11 @@ from app.connectors.Jira_API_connector import (
     fetch_full_bundle,
     get_recently_created_issues,
 )
-from app.mappers.jira_full_sync import full_sync_jira, jira_full_sync_poller
+from app.mappers.jira_full_sync import (
+    build_full_sync_tickets,
+    full_sync_jira,
+    jira_full_sync_poller,
+)
 from app.mappers.jira_mapper import map_jira_bundles_to_canonical
 from app.mappers.jira_rule_engine import transform_canonical_tickets_full
 
@@ -103,6 +108,7 @@ async def lifespan(app: FastAPI):
     global polling_task
     auth.init_db()
     init_config_db()
+    await init_mongo()                      
     app.state.client = httpx.AsyncClient(timeout=30.0)
     polling_task = asyncio.create_task(poll_sharepoint_ingestion())
     jira_full_sync_task = asyncio.create_task(
@@ -116,6 +122,7 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         await app.state.client.aclose()
+        await close_mongo()                  
         for task in (polling_task, jira_full_sync_task):
             if task:
                 task.cancel()
@@ -124,9 +131,7 @@ async def lifespan(app: FastAPI):
                 except asyncio.CancelledError:
                     pass
         polling_task = None
-
         jira_full_sync_task = None
-
 
 app = FastAPI(lifespan=lifespan)
 app.include_router(infor_router)  # registering infor router
@@ -204,7 +209,7 @@ class PipelineSave(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Existing endpoints
+# Endpoints
 # ---------------------------------------------------------------------------
 
 
@@ -403,7 +408,9 @@ async def trigger_full_sync(projects: list[str] | None = None):
     tickets = await full_sync_jira(projects=projects)
     return {"count": len(tickets)}
 
-
+# ---------------------------------------------------------------------------
+# output Endpoints
+# ---------------------------------------------------------------------------
 @app.post("/api/ingest/local-folder")
 async def ingest_local_folder(
     request: IngestionRequest, background_tasks: BackgroundTasks, http_request: Request
@@ -451,22 +458,24 @@ async def ingest_local_folder(
         }
 
     if "jira" in connector_name:
-        # Start a background polling task for Jira
-        background_tasks.add_task(poll_jira, request.rule or "Default Rule")
+        rule = request.rule or "Default Rule"
+        tickets = await full_sync_jira(rule=rule)
         add_history_entry(
             connector=request.connector,
             mapper=request.mapper or "",
-            rules=request.rule or "Default Rule",
-            outputs=request.outputs or "",
-            status="polling",
-            processed=0,
-            message="Polling every 5 minutes.",
+            rules=rule,
+            outputs=request.outputs or "Local JSON",
+            status="completed",
+            processed=len(tickets),
         )
         return {
             "status": "success",
-            "processed": 0,
-            "message": "Jira connector started. Polling every 5 minutes.",
-            "rule": request.rule or "Default Rule",
+            "processed": len(tickets),
+            "rule": rule,
+            "message": (
+                f"Jira full sync complete — {len(tickets)} ticket(s) "
+                f"written to local JSON."
+            ),
         }
 
     if "sharepoint" in connector_name:
@@ -516,7 +525,87 @@ async def ingest_local_folder(
         "rule": request.rule or "Default Rule",
     }
 
+@app.post("/api/ingest/mongodb")
+async def ingest_mongodb(request: IngestionRequest, http_request: Request):
+    """Run the selected connector and persist canonical docs to MongoDB only."""
+    connector_name = request.connector.lower()
+    rule = request.rule or "Default Rule"
 
+    if "infor" in connector_name:
+        if request.order_type is None or request.order_number is None:
+            raise HTTPException(422, "Infor requires an order type and order number.")
+        tenant = infor_setting("INFOR_TENANT")
+        raw_data = await fetch_order_lines(
+            request.order_type, request.order_number, http_request
+        )
+        documents = map_infor_response(
+            raw_data, request.order_type, tenant, request.order_number,
+        )
+        documents = [apply_selected_rules(d, rule) for d in documents]
+        summary = await persist("infor", documents)
+        add_history_entry(
+            connector=request.connector,
+            mapper=request.mapper or "",
+            rules=rule,
+            outputs="MongoDB",
+            status="completed",
+            processed=summary["inserted"] + summary["modified"],
+        )
+        return {"status": "success", **summary}
+
+    if "sharepoint" in connector_name:
+        # Reuse the shared processor, but persist instead of writing files.
+        while not ingestion_lock.acquire(blocking=False):
+            await asyncio.sleep(0.05)
+        try:
+            _, accepted, sync_state = await asyncio.to_thread(
+                _process_sharepoint_ingestion, rule, False
+            )
+            summary = await persist("sharepoint", accepted) if accepted else {
+                "source": "sharepoint", "inserted": 0, "modified": 0,
+                "matched": 0, "skipped": 0, "events_appended": 0,
+            }
+            await asyncio.to_thread(save_sharepoint_sync_state, *sync_state)
+        finally:
+            ingestion_lock.release()
+        add_history_entry(
+            connector=request.connector,
+            mapper=request.mapper or "",
+            rules=rule,
+            outputs="MongoDB",
+            status="completed",
+            processed=summary["inserted"] + summary["modified"],
+        )
+        return {"status": "success", **summary}
+
+    if "jira" in connector_name:
+        tickets = await build_full_sync_tickets(rule)
+        summary = await persist("jira", tickets)
+        add_history_entry(
+            connector=request.connector,
+            mapper=request.mapper or "",
+            rules=rule,
+            outputs="MongoDB",
+            status="completed",
+            processed=summary["inserted"] + summary["modified"],
+        )
+        return {"status": "success", **summary}
+
+    # Local files / anything else
+    INPUT_FOLDER.mkdir(parents=True, exist_ok=True)
+    raw_files = read_local_text_files(INPUT_FOLDER)
+    canonical = map_local_files_to_canonical(raw_files)
+    canonical = [apply_selected_rules(d, rule) for d in canonical]
+    summary = await persist("local_files", canonical)
+    add_history_entry(
+        connector=request.connector,
+        mapper=request.mapper or "",
+        rules=rule,
+        outputs="MongoDB",
+        status="completed",
+        processed=summary["inserted"] + summary["modified"],
+    )
+    return {"status": "success", **summary}
 # ---------------------------------------------------------------------------
 # Config - Connectors
 # ---------------------------------------------------------------------------
