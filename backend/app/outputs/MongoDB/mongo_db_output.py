@@ -24,11 +24,17 @@ is not meant to run repeatedly.
 """
 
 import os
+from pathlib import Path
 
+from dotenv import load_dotenv
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
 
 from app.outputs.MongoDB.source_registration_table import SOURCES
 
+
+# Load backend-local settings before capturing connection settings. Environment
+# variables already set by the deployment take precedence over this file.
+load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 # Connection settings. Override with environment variables in deployment.
 MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")

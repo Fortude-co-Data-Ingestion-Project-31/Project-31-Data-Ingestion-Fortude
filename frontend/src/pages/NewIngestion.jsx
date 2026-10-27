@@ -184,11 +184,23 @@ export default function NewIngestion({ form, setForm, config, onStart }) {
           {fields.map(([label, key, val, opts]) => (
             <React.Fragment key={key}>
               <label htmlFor={key} className="font-semibold text-sm self-center cursor-pointer" style={{ color: COLORS.text }}>{label}</label>
-              <Select id={key} value={val} onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value,
-                ...(key === "connector" ? {
-                  outputs: e.target.value.toLowerCase().includes("infor") ? "Local JSON" : "",
-                } : {}),
-              }))} options={key === "outputs" && isInfor ? ["Local JSON"] : opts} placeholder="Select from the following options" />
+              <Select
+                id={key}
+                value={val}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    [key]: e.target.value,
+                    ...(key === "connector" ? { outputs: "" } : {}),
+                  }))
+                }
+                options={
+                  key === "outputs" && isInfor
+                    ? ["Local JSON", ...opts]
+                    : opts
+                }
+                placeholder="Select from the following options"
+              />
             </React.Fragment>
           ))}
         </div>

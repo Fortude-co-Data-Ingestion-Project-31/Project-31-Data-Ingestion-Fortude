@@ -14,3 +14,4 @@ motor
 pymongo
 pytest_asyncio
 tzdata
+sentence-transformers

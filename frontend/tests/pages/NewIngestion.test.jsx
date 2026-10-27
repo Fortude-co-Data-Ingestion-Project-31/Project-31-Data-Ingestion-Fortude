@@ -16,9 +16,15 @@ import { useState } from "react";
 import NewIngestion from "../../src/pages/NewIngestion";
 
 const CONFIG = {
-  connectors: [{ id: 1, name: "Jira Support" }],
+  connectors: [
+    { id: 1, name: "Jira Support" },
+    { id: 2, name: "Infor Sales" },
+  ],
   rules: [{ id: 1, name: "Jira Support Rules" }],
-  outputs: [{ id: 1, name: "PostgreSQL" }],
+  outputs: [
+    { id: 1, name: "PostgreSQL" },
+    { id: 2, name: "MongoDB Vector Database" },
+  ],
 };
 
 // `NewIngestion` expects its `form` state to be lifted up by the parent
@@ -45,6 +51,21 @@ describe("NewIngestion", () => {
 
     await user.selectOptions(screen.getByLabelText("Select Outputs"), "PostgreSQL");
     expect(startButton).toBeEnabled();
+  });
+
+  it("allows Infor to select MongoDB Vector Database as its output", async () => {
+    const user = userEvent.setup();
+    render(<Wrapper onStart={vi.fn()} />);
+
+    await user.selectOptions(screen.getByLabelText("Select Connector"), "Infor Sales");
+    await user.selectOptions(
+      screen.getByLabelText("Select Outputs"),
+      "MongoDB Vector Database",
+    );
+
+    expect(screen.getByLabelText("Select Outputs")).toHaveValue(
+      "MongoDB Vector Database",
+    );
   });
 
   //checks if the NewIngestion page shows a loading screen while onStart is pending, naming the chosen connector/

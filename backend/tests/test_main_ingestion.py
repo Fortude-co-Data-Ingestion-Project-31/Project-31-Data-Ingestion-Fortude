@@ -2,9 +2,16 @@ import asyncio
 import json
 
 from fastapi import BackgroundTasks, Request
+import pytest
 
 from app import main
 from app.connectors import config_db
+
+
+@pytest.fixture(autouse=True)
+def initialize_config_database(monkeypatch, tmp_path):
+    monkeypatch.setattr(config_db, "DB_PATH", tmp_path / "config.db")
+    config_db.init_config_db()
 
 
 def run_endpoint(request):
@@ -16,7 +23,7 @@ def test_manual_sharepoint_selection_uses_shared_sync_and_history(monkeypatch):
     history = []
     monkeypatch.setattr(
         main, "run_sharepoint_ingestion",
-        lambda rule: calls.append(rule)
+        lambda rule, mapper=None: calls.append((rule, mapper))
         or {"status": "success", "processed": 2, "rule": rule},
     )
     monkeypatch.setattr(main, "add_history_entry", lambda **kwargs: history.append(kwargs))
@@ -26,7 +33,7 @@ def test_manual_sharepoint_selection_uses_shared_sync_and_history(monkeypatch):
         mapper="Document Mapper", outputs="Kafka",
     ))
 
-    assert calls == ["Knowledge Base Rules"]
+    assert calls == [("Knowledge Base Rules", "Document Mapper")]
     assert result["processed"] == 2
     assert history == [{
         "connector": "SharePoint", "mapper": "Document Mapper",
@@ -127,6 +134,259 @@ def test_sharepoint_persists_only_accepted_documents_when_mongodb_selected(
     assert persisted[0][1][0]["kb_category"] == "how-to"
     assert "knowledge" in persisted[0][1][0]["tags"]
     assert events == ["persist", "save"]
+
+
+def test_sharepoint_vector_output_does_not_write_document_collection(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setattr(main, "OUTPUT_FOLDER", tmp_path)
+    delta = {
+        "delta_link": "new-delta",
+        "changes": [{
+            "item_id": "vector-id",
+            "deleted": False,
+            "supported": True,
+            "record": {
+                "source": "sharepoint",
+                "item_id": "vector-id",
+                "file_name": "guide.txt",
+                "content": "Vector-only guide content.",
+            },
+        }],
+    }
+    configure_sync_mocks(monkeypatch, delta)
+    vector_documents = []
+
+    async def unexpected_document_write(source, documents):
+        raise AssertionError("Vector-only output must not write document records")
+
+    async def capture_vectors(source, documents):
+        vector_documents.append((source, documents))
+
+    monkeypatch.setattr(main, "persist", unexpected_document_write)
+    monkeypatch.setattr(main, "persist_vectors", capture_vectors)
+    monkeypatch.setattr(main, "add_history_entry", lambda **kwargs: None)
+
+    result = run_endpoint(main.IngestionRequest(
+        connector="SharePoint",
+        rule="Knowledge Base Rules",
+        mapper="Custom JSON Mapper",
+        outputs="MongoDB Vector Database",
+    ))
+
+    assert result["processed"] == 1
+    assert vector_documents[0][0] == "sharepoint"
+    assert vector_documents[0][1][0]["document_id"] == "vector-id"
+    assert vector_documents[0][1][0]["mapper"] == "Custom JSON Mapper"
+    assert vector_documents[0][1][0]["rule_applied"] == "Knowledge Base Rules"
+    assert "knowledge" in vector_documents[0][1][0]["tags"]
+
+
+def test_sharepoint_saves_selection_for_background_poller(monkeypatch):
+    selected = []
+    monkeypatch.setattr(
+        main,
+        "set_sharepoint_selection",
+        lambda outputs, mapper, rules: selected.append((outputs, mapper, rules)),
+    )
+    async def vector_sync(rule, outputs, mapper=None, full_vector_sync=False):
+        selected.append((rule, outputs, mapper))
+        selected.append(("full_vector_sync", full_vector_sync))
+        return {"status": "success", "processed": 0, "rule": rule}
+
+    monkeypatch.setattr(main, "_run_sharepoint_selected_ingestion", vector_sync)
+    monkeypatch.setattr(main, "add_history_entry", lambda **kwargs: None)
+
+    result = run_endpoint(main.IngestionRequest(
+        connector="SharePoint",
+        mapper="Custom JSON Mapper",
+        rule="L3 Ticket Rules",
+        outputs="MongoDB Vector Database",
+    ))
+
+    assert result["processed"] == 0
+    assert selected == [(
+        "MongoDB Vector Database", "Custom JSON Mapper", "L3 Ticket Rules"
+    ), ("L3 Ticket Rules", "MongoDB Vector Database", "Custom JSON Mapper"),
+        ("full_vector_sync", True)]
+
+
+def test_sharepoint_vector_output_removes_rule_rejected_vectors(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setattr(main, "OUTPUT_FOLDER", tmp_path)
+    delta = {
+        "delta_link": "new-delta",
+        "changes": [{
+            "item_id": "secret-id",
+            "deleted": False,
+            "supported": True,
+            "record": {
+                "source": "sharepoint",
+                "item_id": "secret-id",
+                "file_name": "guide.txt",
+                "content": "password: no-longer-safe",
+            },
+        }],
+    }
+    saved = configure_sync_mocks(monkeypatch, delta)
+    deleted = []
+    vector_calls = []
+
+    async def capture_delete(source, document_ids):
+        deleted.append((source, set(document_ids)))
+
+    async def capture_vectors(source, documents):
+        vector_calls.append((source, documents))
+        return {
+            "source": source,
+            "documents_indexed": 0,
+            "chunks_indexed": 0,
+            "skipped": 0,
+            "database": "atlas_vectors",
+            "collection": "vector_chunks",
+        }
+
+    monkeypatch.setattr(main, "delete_vectors", capture_delete)
+    monkeypatch.setattr(main, "persist_vectors", capture_vectors)
+    monkeypatch.setattr(main, "add_history_entry", lambda **kwargs: None)
+
+    result = run_endpoint(main.IngestionRequest(
+        connector="SharePoint",
+        mapper="Standard Field Mapper",
+        rule="Knowledge Base Rules",
+        outputs="MongoDB Vector Database",
+    ))
+
+    assert result["processed"] == 1
+    assert vector_calls == [("sharepoint", [])]
+    assert result["vector_output"]["chunks_indexed"] == 0
+    assert deleted == [("sharepoint", {"secret-id"})]
+    assert saved == [
+        ("drive-id", "new-delta", {"secret-id": "guide.json"}, set())
+    ]
+
+
+def test_manual_sharepoint_vector_ingestion_reloads_all_files(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setattr(main, "OUTPUT_FOLDER", tmp_path)
+    delta = {
+        "delta_link": "fresh-delta",
+        "changes": [{
+            "item_id": "old-item",
+            "deleted": False,
+            "supported": True,
+            "record": {
+                "source": "sharepoint",
+                "item_id": "old-item",
+                "file_name": "existing.txt",
+                "content": "Existing SharePoint content",
+            },
+        }],
+    }
+    cleared = []
+    saved = []
+    monkeypatch.setattr(main, "get_sharepoint_drive_id", lambda: "drive-id")
+    monkeypatch.setattr(
+        main, "clear_sharepoint_delta_link", lambda drive: cleared.append(drive)
+    )
+    monkeypatch.setattr(main, "get_sharepoint_delta_link", lambda drive: None)
+    monkeypatch.setattr(
+        main, "get_sharepoint_item_mappings", lambda drive: {}
+    )
+    delta_requests = []
+
+    def read_delta(delta_link=None):
+        delta_requests.append(delta_link)
+        return delta
+
+    monkeypatch.setattr(main, "read_sharepoint_delta", read_delta)
+    monkeypatch.setattr(
+        main, "save_sharepoint_sync_state", lambda *state: saved.append(state)
+    )
+    vector_writes = []
+
+    async def capture_vectors(source, documents):
+        vector_writes.append((source, documents))
+        return {
+            "source": source,
+            "documents_indexed": len(documents),
+            "chunks_indexed": len(documents),
+            "skipped": 0,
+            "database": "atlas_vectors",
+            "collection": "vector_chunks",
+        }
+
+    monkeypatch.setattr(main, "persist_vectors", capture_vectors)
+    monkeypatch.setattr(main, "add_history_entry", lambda **kwargs: None)
+
+    result = run_endpoint(main.IngestionRequest(
+        connector="SharePoint",
+        mapper="Standard Field Mapper",
+        rule="Knowledge Base Rules",
+        outputs="MongoDB Vector Database",
+    ))
+
+    assert cleared == ["drive-id"]
+    assert delta_requests == [None]
+    assert vector_writes[0][0] == "sharepoint"
+    assert vector_writes[0][1][0]["document_id"] == "old-item"
+    assert result["vector_output"]["database"] == "atlas_vectors"
+    assert result["vector_output"]["collection"] == "vector_chunks"
+    assert saved == [
+        ("drive-id", "fresh-delta", {"old-item": "existing.json"}, set())
+    ]
+
+
+def test_failed_vector_write_does_not_advance_fresh_sharepoint_sync(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setattr(main, "OUTPUT_FOLDER", tmp_path)
+    delta = {
+        "delta_link": "must-not-save",
+        "changes": [{
+            "item_id": "item-id",
+            "deleted": False,
+            "supported": True,
+            "record": {
+                "source": "sharepoint",
+                "item_id": "item-id",
+                "file_name": "guide.txt",
+                "content": "guide content",
+            },
+        }],
+    }
+    cleared = []
+    saved = []
+    monkeypatch.setattr(main, "get_sharepoint_drive_id", lambda: "drive-id")
+    monkeypatch.setattr(
+        main, "clear_sharepoint_delta_link", lambda drive: cleared.append(drive)
+    )
+    monkeypatch.setattr(main, "get_sharepoint_delta_link", lambda drive: None)
+    monkeypatch.setattr(
+        main, "get_sharepoint_item_mappings", lambda drive: {}
+    )
+    monkeypatch.setattr(main, "read_sharepoint_delta", lambda delta=None: delta_result)
+
+    async def failed_vector_write(source, documents):
+        raise RuntimeError("Vector Atlas unavailable")
+
+    monkeypatch.setattr(main, "persist_vectors", failed_vector_write)
+    monkeypatch.setattr(
+        main, "save_sharepoint_sync_state", lambda *state: saved.append(state)
+    )
+
+    delta_result = delta
+    with pytest.raises(RuntimeError, match="Vector Atlas unavailable"):
+        run_endpoint(main.IngestionRequest(
+            connector="SharePoint",
+            rule="Knowledge Base Rules",
+            outputs="MongoDB Vector Database",
+        ))
+
+    assert cleared == ["drive-id"]
+    assert saved == []
 
 
 def test_sharepoint_does_not_contact_mongodb_by_default(monkeypatch, tmp_path):
@@ -353,7 +613,7 @@ def test_polling_waits_calls_mongodb_sync_and_retries(monkeypatch):
         if len([call for call in calls if call[0] == "sleep"]) == 3:
             raise asyncio.CancelledError
 
-    async def fake_mongodb_sync(rule):
+    async def fake_mongodb_sync(rule, mapper=None):
         calls.append(("run", rule))
         if len([call for call in calls if call[0] == "run"]) == 1:
             raise RuntimeError("temporary failure")
@@ -369,6 +629,48 @@ def test_polling_waits_calls_mongodb_sync_and_retries(monkeypatch):
     assert calls == [
         ("sleep", main.POLL_INTERVAL_SECONDS), ("run", "Knowledge Base Rules"),
         ("sleep", main.POLL_INTERVAL_SECONDS), ("run", "Knowledge Base Rules"),
+        ("sleep", main.POLL_INTERVAL_SECONDS),
+    ]
+
+
+def test_polling_uses_selected_vector_output(monkeypatch):
+    calls = []
+
+    async def fake_sleep(seconds):
+        calls.append(("sleep", seconds))
+        if len([call for call in calls if call[0] == "sleep"]) == 2:
+            raise asyncio.CancelledError
+
+    async def vector_sync(rule, outputs, mapper=None):
+        calls.append(("vector", rule, outputs, mapper))
+
+    monkeypatch.setattr(main.asyncio, "sleep", fake_sleep)
+    monkeypatch.setattr(
+        main,
+        "get_sharepoint_selection",
+        lambda: {
+            "outputs": "MongoDB Vector Database",
+            "mapper": "Custom JSON Mapper",
+            "rules": "L3 Ticket Rules",
+        },
+    )
+    monkeypatch.setattr(main, "_run_sharepoint_selected_ingestion", vector_sync)
+    monkeypatch.setattr(
+        main,
+        "_run_sharepoint_mongodb_ingestion",
+        lambda rule, mapper=None: (_ for _ in ()).throw(
+            AssertionError("Document-only writer should not run")
+        ),
+    )
+
+    try:
+        asyncio.run(main.poll_sharepoint_ingestion())
+    except asyncio.CancelledError:
+        pass
+
+    assert calls == [
+        ("sleep", main.POLL_INTERVAL_SECONDS),
+        ("vector", "L3 Ticket Rules", "MongoDB Vector Database", "Custom JSON Mapper"),
         ("sleep", main.POLL_INTERVAL_SECONDS),
     ]
 
@@ -431,7 +733,7 @@ def test_automatic_mongodb_sync_failure_does_not_save_state(monkeypatch):
     async def fake_to_thread(function, *args):
         if function is main._process_sharepoint_ingestion:
             return ({"status": "success", "processed": 1, "rule": args[0]},
-                    documents, sync_state)
+                    documents, sync_state, set())
         saved.append(args)
 
     async def failed_persist(source, persisted_documents):

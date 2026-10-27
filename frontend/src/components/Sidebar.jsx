@@ -1,5 +1,5 @@
 import React from "react";
-import { LayoutGrid, Activity, History as HistoryIcon, Settings } from "lucide-react";
+import { LayoutGrid, Activity, History as HistoryIcon, Settings, Database } from "lucide-react";
 import { COLORS } from "../theme";
 
 // The list of page links shown in the left navigation area.
@@ -7,6 +7,7 @@ const NAV_ITEMS = [
   { key: "dashboard", label: "Dashboard", icon: LayoutGrid },
   { key: "ingest", label: "Ingest", icon: Activity },
   { key: "history", label: "History", icon: HistoryIcon },
+  { key: "vectors", label: "Vector Data", icon: Database },
   { key: "configure", label: "Configuration", icon: Settings },
 ];
 

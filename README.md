@@ -9,6 +9,60 @@ This system is composed of:
 - **Business Rules** to filter, transform, and route data records
 - **Storage Systems** to output the processed data to appropriate destinations
 
+## MongoDB vector output
+
+The ingestion output list includes separate **MongoDB** (document storage) and
+**MongoDB Vector Database** targets. Selecting the vector target writes chunk
+text and normalized embeddings to the `vector_chunks` collection without
+writing the source document to the document collections.
+
+Vector output requires a MongoDB Atlas cluster with Vector Search enabled.
+The application creates a `vector_index` Atlas Search index on first write.
+Embeddings are generated locally with
+`sentence-transformers/all-MiniLM-L6-v2`; set
+`MONGO_VECTOR_EMBEDDING_MODEL` to use another compatible local model. The
+index dimension must match the configured model. Regular MongoDB document
+outputs use `MONGO_URI` and `MONGO_DB_NAME`. Vector output has its own
+connection and database settings: `MONGO_VECTOR_URI` and
+`MONGO_VECTOR_DB_NAME`. The collection defaults to `vector_chunks`; optionally
+set `MONGO_VECTOR_COLLECTION` to use a different collection name. Neither the
+database nor collection setting is the Atlas project or cluster name.
+
+To use MongoDB Atlas, create `backend/app/.env` (this file is ignored by Git)
+and set:
+
+```dotenv
+MONGO_URI=mongodb+srv://<document-user>:<url-encoded-password>@<document-cluster-host>/?retryWrites=true&w=majority
+MONGO_DB_NAME=<document-database>
+MONGO_VECTOR_URI=mongodb+srv://<vector-user>:<url-encoded-password>@<vector-cluster-host>/?retryWrites=true&w=majority
+MONGO_VECTOR_DB_NAME=<vector-database>
+MONGO_VECTOR_COLLECTION=vector_chunks
+```
+
+Use each connection string from Atlas, replace the placeholders locally, and
+restart the backend after changing the file. The vector URI may point to the
+same cluster as the document URI, while `MONGO_VECTOR_DB_NAME` selects a
+separate database. In Atlas, allow the backend machine's IP address in Network
+Access and give each database user read/write access to its database. Do not
+share or commit the URIs. Vector output requires both vector-specific settings
+and fails clearly instead of silently writing to the regular MongoDB database
+or localhost.
+
+For a manual SharePoint ingestion, selecting **MongoDB Vector Database**
+re-enumerates the current SharePoint files and upserts their chunks, so existing
+files are indexed even when the delta feed has no new changes. The response
+reports the target database, collection, and number of indexed chunks. In Atlas
+Data Explorer, open the configured vector database and the `vector_chunks`
+collection to see each chunk's `content` and `embedding` fields. Open **Vector
+Data** in the application sidebar to browse chunk text and metadata without
+displaying embedding arrays.
+
+SharePoint vector ingestion retains the selected mapper and rule names, along
+with rule metadata and tags, on each vector chunk. These selections are also
+retained for automatic SharePoint delta sync. Documents rejected by the
+Knowledge Base sensitivity rule are excluded from vector storage, and any
+older vectors for them are removed.
+
 ## Contributors
 
 | Name                     | Student Email               | Personal Email               |

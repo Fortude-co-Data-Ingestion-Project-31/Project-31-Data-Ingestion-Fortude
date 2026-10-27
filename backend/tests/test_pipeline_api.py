@@ -45,6 +45,66 @@ def test_create_pipeline(client):
     assert config_db.get_pipeline(pipeline["id"]) == pipeline
 
 
+def test_mongodb_vector_database_is_a_distinct_output(client):
+    response = client.get("/api/config/outputs")
+
+    assert response.status_code == 200
+    names = [output["name"] for output in response.json()]
+    assert "MongoDB" in names
+    assert "MongoDB Vector Database" in names
+
+
+def test_sharepoint_output_preference_defaults_to_mongodb_and_can_change(
+    client, monkeypatch, tmp_path
+):
+    monkeypatch.setattr(config_db, "DB_PATH", tmp_path / "preferences.db")
+    config_db.init_config_db()
+
+    assert config_db.get_sharepoint_outputs() == "MongoDB"
+    config_db.set_sharepoint_outputs("MongoDB Vector Database")
+    assert config_db.get_sharepoint_outputs() == "MongoDB Vector Database"
+    config_db.set_sharepoint_selection(
+        "MongoDB Vector Database", "Custom JSON Mapper", "L3 Ticket Rules"
+    )
+    assert config_db.get_sharepoint_selection() == {
+        "outputs": "MongoDB Vector Database",
+        "mapper": "Custom JSON Mapper",
+        "rules": "L3 Ticket Rules",
+    }
+
+
+def test_vector_documents_endpoint_returns_chunks_without_embeddings(
+    client, monkeypatch
+):
+    result = {
+        "items": [{
+            "record_id": "sharepoint:guide:guide_0",
+            "source": "sharepoint",
+            "document_id": "guide",
+            "content": "A searchable guide chunk.",
+        }],
+        "total": 1,
+        "limit": 25,
+        "offset": 0,
+        "database": "atlas_vectors",
+        "collection": "vector_chunks",
+    }
+    calls = []
+
+    async def fake_list_vectors(source, limit, offset):
+        calls.append((source, limit, offset))
+        return result
+
+    monkeypatch.setattr(main, "list_vectors", fake_list_vectors)
+    response = client.get(
+        "/api/vector-documents?source=sharepoint&limit=25&offset=0"
+    )
+
+    assert response.status_code == 200
+    assert response.json() == result
+    assert calls == [("sharepoint", 25, 0)]
+
+
 def test_list_pipelines(client):
     """Test listing all pipelines"""
     pipeline1 = config_db.add_pipeline("Jira L3 Ticket", 2, [2], [3])

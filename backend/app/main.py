@@ -8,7 +8,7 @@ import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
 import httpx
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, model_validator
 from typing import Literal
@@ -37,6 +37,7 @@ from app.connectors.config_db import (
     delete_pipeline,
     delete_rule,
     get_pipeline,
+    get_sharepoint_selection,
     get_sharepoint_delta_link,
     get_sharepoint_item_mappings,
     init_config_db,
@@ -46,6 +47,7 @@ from app.connectors.config_db import (
     list_pipelines,
     list_rules,
     save_sharepoint_sync_state,
+    set_sharepoint_selection,
     update_pipeline,
 )
 from app.connectors.local_folder_connector import read_local_text_files
@@ -56,6 +58,12 @@ from app.connectors.sharepoint_connector import (
 )
 from app.mappers.local_file_mapper import map_local_files_to_canonical
 from app.outputs.MongoDB.mongo_db_common_func import persist
+from app.outputs.MongoDB.mongo_db_vector_output import (
+    close_vector_mongo,
+    delete_vectors,
+    list_vectors,
+    persist_vectors,
+)
 from app.outputs.MongoDB.source_registration_table import SOURCES
 from app.rules.rule_handlers import apply_selected_rules
 from fastapi import BackgroundTasks, FastAPI, HTTPException
@@ -86,6 +94,7 @@ POLL_INTERVAL_SECONDS = 10
 JIRA_FULL_SYNC_INTERVAL_HOURS = 24
 JIRA_FULL_SYNC_DELAY_SECONDS = 0  # JIRA_FULL_SYNC_INTERVAL_HOURS in seconds
 SHAREPOINT_POLL_RULE = "Knowledge Base Rules"
+MONGODB_VECTOR_OUTPUT = "mongodb vector database"
 
 logger = logging.getLogger(__name__)
 ingestion_lock = threading.Lock()
@@ -125,6 +134,7 @@ async def lifespan(app: FastAPI):
         polling_task = None
 
         jira_full_sync_task = None
+        await close_vector_mongo()
 
 
 app = FastAPI(lifespan=lifespan)
@@ -216,7 +226,7 @@ def read_item(item_id: int, q: str | None = None):
     return {"item_id": item_id, "q": q}
 
 
-def _process_sharepoint_ingestion(rule, save_state=True):
+def _process_sharepoint_ingestion(rule, save_state=True, mapper=None):
     """Synchronize SharePoint changes and return accepted canonical documents."""
     OUTPUT_FOLDER.mkdir(parents=True, exist_ok=True)
 
@@ -235,6 +245,7 @@ def _process_sharepoint_ingestion(rule, save_state=True):
     processed = 0
     seen_item_ids = set()
     documents_to_persist = []
+    rejected_document_ids = set()
 
     for change in delta_result["changes"]:
         item_id = change["item_id"]
@@ -248,6 +259,8 @@ def _process_sharepoint_ingestion(rule, save_state=True):
             continue
 
         document = map_local_files_to_canonical([change["record"]])[0]
+        if mapper:
+            document["mapper"] = mapper
         document = apply_selected_rules(document, rule)
         output_name = Path(document["file_name"]).with_suffix(".json").name
         if previous_output_name and previous_output_name != output_name:
@@ -261,6 +274,8 @@ def _process_sharepoint_ingestion(rule, save_state=True):
         # Keep sensitive documents in existing outputs, but never send them to Mongo.
         if document.get("kb_status") != "rejected_sensitive":
             documents_to_persist.append(document)
+        else:
+            rejected_document_ids.add(document["document_id"])
 
     # A fresh enumeration is authoritative, so remove stale tracked items.
     if previous_delta_link is None:
@@ -283,13 +298,13 @@ def _process_sharepoint_ingestion(rule, save_state=True):
         "processed": processed,
         "rule": rule,
     }
-    return result, documents_to_persist, sync_state
+    return result, documents_to_persist, sync_state, rejected_document_ids
 
 
-def run_sharepoint_ingestion(rule):
+def run_sharepoint_ingestion(rule, mapper=None):
     """Synchronize SharePoint changes and preserve the existing result shape."""
     with ingestion_lock:
-        result, _, _ = _process_sharepoint_ingestion(rule)
+        result, _, _, _ = _process_sharepoint_ingestion(rule, mapper=mapper)
     return result
 
 
@@ -301,35 +316,82 @@ def _mongodb_selected(outputs):
     )
 
 
-async def _run_sharepoint_mongodb_ingestion(rule):
-    """Persist accepted SharePoint documents before advancing sync state."""
+def _mongodb_vector_selected(outputs):
+    """Return whether MongoDB Vector Database was explicitly selected."""
+    return any(
+        output.strip().casefold() == MONGODB_VECTOR_OUTPUT
+        for output in (outputs or "").split(",")
+    )
+
+
+async def _run_sharepoint_selected_ingestion(
+    rule, outputs, mapper=None, full_vector_sync=False
+):
+    """Write selected MongoDB outputs before advancing SharePoint sync state."""
     while not ingestion_lock.acquire(blocking=False):
         await asyncio.sleep(0.05)
     try:
-        result, accepted_documents, sync_state = await asyncio.to_thread(
-            _process_sharepoint_ingestion, rule, False
+        if full_vector_sync and _mongodb_vector_selected(outputs):
+            drive_id = await asyncio.to_thread(get_sharepoint_drive_id)
+            await asyncio.to_thread(clear_sharepoint_delta_link, drive_id)
+        result, accepted_documents, sync_state, rejected_document_ids = (
+            await asyncio.to_thread(
+                _process_sharepoint_ingestion, rule, False, mapper
+            )
         )
-        if accepted_documents:
+        if accepted_documents and _mongodb_selected(outputs):
             await persist("sharepoint", accepted_documents)
+        if _mongodb_vector_selected(outputs):
+            result["vector_output"] = await persist_vectors(
+                "sharepoint", accepted_documents
+            )
+        if _mongodb_vector_selected(outputs):
+            vector_deletes = set(sync_state[3]) | rejected_document_ids
+            if vector_deletes:
+                await delete_vectors("sharepoint", vector_deletes)
         await asyncio.to_thread(save_sharepoint_sync_state, *sync_state)
         return result
     finally:
         ingestion_lock.release()
 
 
+async def _run_sharepoint_mongodb_ingestion(rule, mapper=None):
+    """Preserve the document-output helper used by automatic SharePoint sync."""
+    return await _run_sharepoint_selected_ingestion(rule, "MongoDB", mapper)
+
+
 async def poll_sharepoint_ingestion():
-    """Poll SharePoint and persist accepted documents to MongoDB."""
+    """Poll SharePoint and write to the outputs selected for that connector."""
     while True:
         await asyncio.sleep(POLL_INTERVAL_SECONDS)
         try:
-            await _run_sharepoint_mongodb_ingestion(SHAREPOINT_POLL_RULE)
+            selection = get_sharepoint_selection()
+            outputs = selection["outputs"]
+            mapper = selection["mapper"] or None
+            rule = selection["rules"] or SHAREPOINT_POLL_RULE
+            document_output_selected = _mongodb_selected(outputs)
+            vector_output_selected = _mongodb_vector_selected(outputs)
+            if document_output_selected and vector_output_selected:
+                await _run_sharepoint_selected_ingestion(
+                    rule, outputs, mapper
+                )
+            elif document_output_selected:
+                await _run_sharepoint_mongodb_ingestion(rule, mapper)
+            elif vector_output_selected:
+                await _run_sharepoint_selected_ingestion(
+                    rule, outputs, mapper
+                )
+            else:
+                await asyncio.to_thread(
+                    run_sharepoint_ingestion, rule, mapper
+                )
         except asyncio.CancelledError:
             raise
         except Exception:
             logger.exception("Automatic SharePoint ingestion failed")
 
 
-async def poll_jira(rule: str | None = None):
+async def poll_jira(rule: str | None = None, outputs: str | None = None):
     """
     Polls Jira every 5 minutes, transforms data, and saves to JSON.
     Defaults to running ALL rule sets (A, B, C, D, F, G).
@@ -353,6 +415,8 @@ async def poll_jira(rule: str | None = None):
                 canonical_tickets,
                 rule,
             )
+            if _mongodb_vector_selected(outputs):
+                await persist_vectors("jira", final_tickets)
 
             OUTPUT_FOLDER.mkdir(parents=True, exist_ok=True)
             output_file = OUTPUT_FOLDER / "jira_issues.json"
@@ -423,6 +487,9 @@ async def ingest_local_folder(
             request.order_number,
         )
         documents = [apply_selected_rules(document, rule) for document in documents]
+        vector_summary = None
+        if _mongodb_vector_selected(request.outputs):
+            vector_summary = await persist_vectors("infor_m3", documents)
         OUTPUT_FOLDER.mkdir(parents=True, exist_ok=True)
         output_name = f"infor_{request.order_type}_{request.order_number}.json"
         (OUTPUT_FOLDER / output_name).write_text(
@@ -432,11 +499,18 @@ async def ingest_local_folder(
         message = (
             f"Saved {len(documents)} Infor order line(s) to local JSON: {output_name}"
         )
+        history_outputs = "Local JSON"
+        if vector_summary is not None:
+            message += (
+                f"; indexed {vector_summary['chunks_indexed']} vector chunk(s) "
+                "in MongoDB"
+            )
+            history_outputs += ", MongoDB Vector Database"
         add_history_entry(
             connector=request.connector,
             mapper=request.mapper or "",
             rules=rule,
-            outputs="Local JSON",
+            outputs=history_outputs,
             status="completed",
             processed=len(documents),
             message=message,
@@ -450,7 +524,11 @@ async def ingest_local_folder(
 
     if "jira" in connector_name:
         # Start a background polling task for Jira
-        background_tasks.add_task(poll_jira, request.rule or "Default Rule")
+        background_tasks.add_task(
+            poll_jira,
+            request.rule or "Default Rule",
+            request.outputs,
+        )
         add_history_entry(
             connector=request.connector,
             mapper=request.mapper or "",
@@ -469,10 +547,29 @@ async def ingest_local_folder(
 
     if "sharepoint" in connector_name:
         rule = request.rule or "Default Rule"
-        if _mongodb_selected(request.outputs):
-            result = await _run_sharepoint_mongodb_ingestion(rule)
+        set_sharepoint_selection(
+            request.outputs or "",
+            request.mapper or "",
+            request.rule or "Default Rule",
+        )
+        document_output_selected = _mongodb_selected(request.outputs)
+        vector_output_selected = _mongodb_vector_selected(request.outputs)
+        if document_output_selected and vector_output_selected:
+            result = await _run_sharepoint_selected_ingestion(
+                rule, request.outputs, request.mapper, full_vector_sync=True
+            )
+        elif document_output_selected:
+            result = await _run_sharepoint_mongodb_ingestion(
+                rule, request.mapper
+            )
+        elif vector_output_selected:
+            result = await _run_sharepoint_selected_ingestion(
+                rule, request.outputs, request.mapper, full_vector_sync=True
+            )
         else:
-            result = await asyncio.to_thread(run_sharepoint_ingestion, rule)
+            result = await asyncio.to_thread(
+                run_sharepoint_ingestion, rule, request.mapper
+            )
         add_history_entry(
             connector=request.connector,
             mapper=request.mapper or "",
@@ -489,15 +586,20 @@ async def ingest_local_folder(
 
     raw_files = read_local_text_files(INPUT_FOLDER)
     canonical_documents = map_local_files_to_canonical(raw_files)
+    processed_documents = []
 
     for document in canonical_documents:
         document = apply_selected_rules(document, request.rule or "Default Rule")
+        processed_documents.append(document)
         output_name = Path(document["file_name"]).with_suffix(".json").name
         output_path = OUTPUT_FOLDER / output_name
         output_path.write_text(
             json.dumps(document, indent=2, ensure_ascii=False),
             encoding="utf-8",
         )
+
+    if _mongodb_vector_selected(request.outputs):
+        await persist_vectors("local_folder", processed_documents)
 
     add_history_entry(
         connector=request.connector,
@@ -697,6 +799,16 @@ def remove_history_entry(entry_id: int):
     """Delete a history entry by ID."""
     if not delete_history_entry(entry_id):
         raise HTTPException(status_code=404, detail="History entry not found.")
+
+
+@app.get("/api/vector-documents")
+async def get_vector_documents(
+    source: str | None = None,
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+):
+    """List stored vector chunks without exposing their embedding arrays."""
+    return await list_vectors(source=source, limit=limit, offset=offset)
 
 
 # ---------------------------------------------------------------------------

@@ -25,6 +25,16 @@ describe("Sidebar", () => {
     await user.click(screen.getByText("History"));
     expect(goTo).toHaveBeenCalledWith("history");
   });
+
+  it("opens the vector data page", async () => {
+    const user = userEvent.setup();
+    const goTo = vi.fn();
+
+    render(<Sidebar page="vectors" goTo={goTo} />);
+
+    await user.click(screen.getByText("Vector Data"));
+    expect(goTo).toHaveBeenCalledWith("vectors");
+  });
 //checks if the Sidebar component calls onSignOut when the sign-out button is clicked
   it("calls onSignOut when the sign-out button is clicked", async () => {
     const user = userEvent.setup();

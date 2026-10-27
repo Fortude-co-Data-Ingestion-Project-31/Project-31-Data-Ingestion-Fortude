@@ -32,7 +32,12 @@ DB_PATH = Path(__file__).resolve().parent / "users.db"
 _SEED: dict[str, list[str]] = {
     "connectors": ["Infor", "Jira", "SharePoint"],
     "rules": ["Infor Sales Rules", "L3 Ticket Rules", "Knowledge Base Rules"],
-    "output_targets": ["PostgreSQL", "MongoDB", "Kafka", "Vector Database"],
+    "output_targets": [
+        "PostgreSQL",
+        "MongoDB",
+        "Kafka",
+        "MongoDB Vector Database",
+    ],
 }
 
 # ---------------------------------------------------------------------------
@@ -152,7 +157,48 @@ def init_config_db() -> None:
             )
             """)
 
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS output_preferences (
+                connector   TEXT PRIMARY KEY,
+                outputs     TEXT NOT NULL,
+                mapper      TEXT NOT NULL DEFAULT '',
+                rules       TEXT NOT NULL DEFAULT '',
+                updated_at  TEXT NOT NULL
+            )
+            """)
+        preference_columns = {
+            row["name"]
+            for row in cur.execute("PRAGMA table_info(output_preferences)").fetchall()
+        }
+        if "mapper" not in preference_columns:
+            cur.execute(
+                "ALTER TABLE output_preferences ADD COLUMN mapper TEXT NOT NULL DEFAULT ''"
+            )
+        if "rules" not in preference_columns:
+            cur.execute(
+                "ALTER TABLE output_preferences ADD COLUMN rules TEXT NOT NULL DEFAULT ''"
+            )
+
         conn.commit()
+
+        cur.execute(
+            """
+            INSERT OR IGNORE INTO output_preferences
+                (connector, outputs, updated_at)
+            VALUES (?, ?, ?)
+            """,
+            ("SharePoint", "MongoDB", _now_iso()),
+        )
+
+        cur.execute("""
+            UPDATE output_targets
+            SET name = 'MongoDB Vector Database'
+            WHERE name = 'Vector Database'
+              AND NOT EXISTS (
+                  SELECT 1 FROM output_targets
+                  WHERE name = 'MongoDB Vector Database'
+              )
+            """)
 
         # Insert seed data into database
         for table, names in _SEED.items():
@@ -602,6 +648,86 @@ def delete_history_entry(entry_id: int) -> bool:
         cur.execute("DELETE FROM ingestion_history WHERE id = ?", (entry_id,))
         conn.commit()
         return cur.rowcount > 0
+    finally:
+        conn.close()
+
+
+def get_sharepoint_outputs() -> str:
+    """Return the selected SharePoint outputs used by its background poller."""
+    conn = _get_conn()
+    try:
+        row = conn.execute(
+            "SELECT outputs FROM output_preferences WHERE connector = ?",
+            ("SharePoint",),
+        ).fetchone()
+        return row["outputs"] if row else "MongoDB"
+    finally:
+        conn.close()
+
+
+def set_sharepoint_outputs(outputs: str) -> None:
+    """Persist the latest SharePoint output selection for automatic polling."""
+    conn = _get_conn()
+    try:
+        conn.execute(
+            """
+            INSERT INTO output_preferences (connector, outputs, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(connector) DO UPDATE SET
+                outputs = excluded.outputs,
+                updated_at = excluded.updated_at
+            """,
+            ("SharePoint", outputs.strip(), _now_iso()),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_sharepoint_selection() -> dict[str, str]:
+    """Return the output, mapper, and rule selection for SharePoint polling."""
+    conn = _get_conn()
+    try:
+        row = conn.execute(
+            """
+            SELECT outputs, mapper, rules FROM output_preferences
+            WHERE connector = ?
+            """,
+            ("SharePoint",),
+        ).fetchone()
+        if row is None:
+            return {
+                "outputs": "MongoDB",
+                "mapper": "",
+                "rules": "Knowledge Base Rules",
+            }
+        return {
+            "outputs": row["outputs"],
+            "mapper": row["mapper"],
+            "rules": row["rules"],
+        }
+    finally:
+        conn.close()
+
+
+def set_sharepoint_selection(outputs: str, mapper: str, rules: str) -> None:
+    """Persist the latest SharePoint output, mapper, and rule selections."""
+    conn = _get_conn()
+    try:
+        conn.execute(
+            """
+            INSERT INTO output_preferences
+                (connector, outputs, mapper, rules, updated_at)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(connector) DO UPDATE SET
+                outputs = excluded.outputs,
+                mapper = excluded.mapper,
+                rules = excluded.rules,
+                updated_at = excluded.updated_at
+            """,
+            ("SharePoint", outputs.strip(), mapper.strip(), rules.strip(), _now_iso()),
+        )
+        conn.commit()
     finally:
         conn.close()
 

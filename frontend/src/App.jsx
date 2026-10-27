@@ -15,6 +15,7 @@ import NewIngestion from "./pages/NewIngestion";
 import Configure from "./pages/Configuration";
 import History from "./pages/History";
 import EntryDetail from "./pages/EntryDetail";
+import VectorData from "./pages/VectorData";
 import Login from "./pages/Login";
 import Settings from "./pages/Settings";
 import ChangeUsername from "./pages/ChangeUsername";
@@ -321,6 +322,12 @@ export default function App() {
 
       if (data.message) {
         showToast(data.message);
+      } else if (data.vector_output) {
+        const { chunks_indexed, database, collection, skipped } = data.vector_output;
+        showToast(
+          `Embedded ${chunks_indexed} chunk(s) in ${database}.${collection}` +
+          (skipped ? `; skipped ${skipped} document(s) without text` : "")
+        );
       } else {
         showToast(
           `Ingestion complete - ${data.processed} document(s) processed`
@@ -461,6 +468,7 @@ export default function App() {
                 deleteEntry={deleteEntry}
               />
             )}
+            {page === "vectors" && <VectorData />}
             {page === "entry" && (
               <EntryDetail entry={activeEntry} goTo={goTo} />
             )}

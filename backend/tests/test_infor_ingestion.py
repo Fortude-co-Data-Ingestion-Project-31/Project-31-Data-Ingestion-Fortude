@@ -84,6 +84,62 @@ def test_ingests_order_and_records_actual_output(
     assert history[0]["status"] == "completed"
 
 
+def test_infor_vector_output_is_written_without_document_output(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setenv("INFOR_TENANT", "test_tenant")
+
+    async def fetch(kind, number, request):
+        return {
+            "nrOfFailedTransactions": 0,
+            "results": [{
+                "records": [{
+                    "PNLI": "1",
+                    "PNLS": "0",
+                    "ITNO": "ITEM",
+                    "ORQA": "10",
+                    "RVQA": "5",
+                    "IVQA": "2",
+                }],
+            }],
+        }
+
+    vector_writes = []
+    history = []
+
+    async def capture_vectors(source, documents):
+        vector_writes.append((source, documents))
+        return {"chunks_indexed": len(documents)}
+
+    monkeypatch.setattr(main, "fetch_order_lines", fetch)
+    monkeypatch.setattr(main, "OUTPUT_FOLDER", tmp_path)
+    monkeypatch.setattr(main, "persist_vectors", capture_vectors)
+    monkeypatch.setattr(
+        main,
+        "add_history_entry",
+        lambda **entry: history.append(entry),
+    )
+
+    result = asyncio.run(
+        main.ingest_local_folder(
+            main.IngestionRequest(
+                connector="Infor Sales",
+                order_type="purchase",
+                order_number="123",
+                rule="Infor Sales Rules",
+                outputs="MongoDB Vector Database",
+            ),
+            BackgroundTasks(),
+            Request({"type": "http", "app": main.app}),
+        )
+    )
+
+    assert result["processed"] == 1
+    assert vector_writes[0][0] == "infor_m3"
+    assert vector_writes[0][1][0]["document_id"].startswith("infor_m3:")
+    assert history[0]["outputs"] == "Local JSON, MongoDB Vector Database"
+
+
 @pytest.mark.parametrize(
     "fields",
     [
